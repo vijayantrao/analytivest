@@ -25,9 +25,18 @@ COVER = (
 )
 
 
-@pytest.fixture(scope="module")
-def sample_pdf():
-    return build_sample_rhp()
+@pytest.fixture(scope="module", params=["rupee-sign", "rs-text"])
+def sample_pdf(request):
+    """With a font that has the rupee glyph the sample uses "₹"; without one (e.g. Linux) it writes "Rs.".
+    Real RHPs use both, so every extraction test runs on each variant."""
+    if request.param == "rupee-sign":
+        return build_sample_rhp()
+    from pathlib import Path
+
+    from app.ingest import sample_rhp
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(sample_rhp, "RUPEE_FONT", Path("/no/such/font.ttf"))
+        return build_sample_rhp()
 
 
 def test_pdf_tables_rebuilt_into_rows(sample_pdf):

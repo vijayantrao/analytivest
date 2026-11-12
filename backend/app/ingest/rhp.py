@@ -26,7 +26,8 @@ def normalise(text: str) -> str:
     t = text.replace("₹", RUPEE).replace(" ", " ")
     # Dashes and hyphen look-alikes (PDFs often emit soft hyphens U+00AD for ordinary hyphens)
     t = re.sub("[­‐‑‒–—−]", "-", t)
-    t = re.sub(r"\b(?:Rs\.?|INR)\s*(?=\d|\[)", RUPEE + " ", t)
+    # "Rs. 500", "INR [●]" and unit labels such as "(Rs. in million)" / "(INR crore)" all mean the rupee sign
+    t = re.sub(r"\b(?:Rs\.?|INR)\s*(?=\d|\[|in\b|crores?\b|million\b|lakhs?\b|billion\b)", RUPEE + " ", t, flags=re.I)
     t = re.sub(r"`\s*(?=\d|\[)", RUPEE + " ", t)  # rupee glyph often extracts as a backtick
     t = re.sub(PLACEHOLDER, "[●]", t)
     return t
