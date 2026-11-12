@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, FileUp, Loader2, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -17,11 +17,12 @@ export default function Portfolio() {
   const sums = useSummaries(holdings.map((h) => h.symbol))
   const file = useRef<HTMLInputElement>(null)
   const [mode, setMode] = useState<'replace' | 'merge'>('replace')
+  const [broker, setBroker] = useState<'IN' | 'US'>('IN')
   const [sort, setSort] = useState<SortKey>('value')
   const [add, setAdd] = useState<{ symbol: string; qty: string; avg: string }>({ symbol: '', qty: '', avg: '' })
 
   const imp = useMutation({
-    mutationFn: (f: File) => api.upload(`/api/portfolio/import?mode=${mode}`, f, f.name),
+    mutationFn: (f: File) => api.upload(`/api/portfolio/import?mode=${mode}&market=${broker}`, f, f.name),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolio'] }),
   })
   const addM = useMutation({
@@ -30,21 +31,31 @@ export default function Portfolio() {
   })
   const rm = useMutation({ mutationFn: api.holdingRemove, onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolio'] }) })
 
+  // Totals are in rupees: holdings quoted in another currency (US stocks in USD) are converted at the latest
+  // daily FX close. Each holding's average cost is taken to be in its own quote currency.
+  const foreign = useMemo(() => Array.from(new Set(holdings.map((h) => sums[h.symbol]?.data?.currency)
+    .filter((c): c is string => !!c && c !== 'INR'))).sort(), [holdings, sums])
+  const fxQ = useQueries({ queries: foreign.map((c) => ({ queryKey: ['fx', `${c}INR`], queryFn: () => api.fx(`${c}INR`), staleTime: 60 * 60_000 })) })
+  const fx: Record<string, { rate: number; as_of: string } | undefined> = Object.fromEntries(foreign.map((c, i) => [c, fxQ[i]?.data]))
+  const rateOf = (cur?: string) => (!cur || cur === 'INR' ? 1 : fx[cur]?.rate)
   const rows = useMemo(() => {
     const r = holdings.map((h) => {
       const s = sums[h.symbol]?.data
       const p = s?.price
-      const value = isNum(p) ? p * h.quantity : null
-      const cost = isNum(h.avg_cost) ? h.avg_cost * h.quantity : null
-      const dayChg = isNum(p) && isNum(s?.change_pct) ? value! - value! / (1 + s.change_pct / 100) : null
-      return { ...h, s, value, cost, pnl: value != null && cost != null ? value - cost : null,
+      const fxr = rateOf(s?.currency)
+      const native = isNum(p) ? p * h.quantity : null
+      const value = native != null && fxr ? native * fxr : null
+      const cost = isNum(h.avg_cost) && fxr ? h.avg_cost * h.quantity * fxr : null
+      const dayChg = value != null && isNum(s?.change_pct) ? value - value / (1 + s.change_pct / 100) : null
+      return { ...h, s, native, value, cost, fxMissing: native != null && !fxr, pnl: value != null && cost != null ? value - cost : null,
         pnl_pct: value != null && cost ? (value / cost - 1) * 100 : null, dayChg }
     })
     const total = r.reduce((a, x) => a + (x.value || 0), 0)
     r.forEach((x: any) => { x.weight = total && x.value != null ? (x.value / total) * 100 : null })
     const keyOf = (x: any) => sort === 'business_quality' || sort === 'financial_risk' ? x.s?.[sort] : x[sort]
     return r.sort((a: any, b: any) => (keyOf(b) ?? -Infinity) - (keyOf(a) ?? -Infinity))
-  }, [holdings, sums, sort])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdings, sums, sort, JSON.stringify(fx)])
 
   const loaded = rows.filter((r) => r.value != null)
   const total = loaded.reduce((a, r) => a + r.value!, 0)
@@ -74,9 +85,10 @@ export default function Portfolio() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Portfolio</h1>
-          <p className="max-w-2xl text-[13px] text-ink-2">Import your broker's holdings file (Zerodha Console, Groww or any CSV/Excel with symbol or name, quantity and average price) to see every holding through the three verdicts. Stored only on this computer.</p>
+          <p className="max-w-2xl text-[13px] text-ink-2">Import your broker's holdings file (Zerodha Console, Groww, or for US stocks INDmoney, Vested or any CSV/Excel with symbol or name, quantity and average price) to see every holding through the three verdicts. Choose <b>US stocks</b> for a file of US tickers (prices and average cost in USD); totals are shown in rupees. Stored only on this computer.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Segmented label="Broker" value={broker} onChange={setBroker} options={[{ value: 'IN', label: 'Indian broker' }, { value: 'US', label: 'US stocks' }]} />
           <Segmented label="Import mode" value={mode} onChange={setMode} options={[{ value: 'replace', label: 'Replace' }, { value: 'merge', label: 'Merge' }]} />
           <button onClick={() => file.current?.click()} disabled={imp.isPending}
             className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60">
@@ -91,7 +103,7 @@ export default function Portfolio() {
         <div className="rounded-lg border border-line bg-surface p-3 text-[13px]">
           <b>{imp.data.added.length} holding(s) imported.</b>
           {imp.data.added.some((x: any) => x.note) && <span className="text-muted"> Matched by name: {imp.data.added.filter((x: any) => x.note).map((x: any) => `${x.from} → ${x.symbol}`).join('; ')}. Check these.</span>}
-          {imp.data.unresolved.length > 0 && <p className="mt-1 text-warn">Not matched ({imp.data.unresolved.length}): {imp.data.unresolved.map((u: any) => `${u.name} (${u.reason})`).join('; ')}. Add them manually below with the NSE symbol.</p>}
+          {imp.data.unresolved.length > 0 && <p className="mt-1 text-warn">Not matched ({imp.data.unresolved.length}): {imp.data.unresolved.map((u: any) => `${u.name} (${u.reason})`).join('; ')}. Add them manually below with the {broker === 'IN' ? 'NSE symbol' : 'US ticker'}.</p>}
         </div>
       )}
 
@@ -100,7 +112,7 @@ export default function Portfolio() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <MetricTile label="Current value" value={money(total)} sub={pending > 0 ? `${pending} still loading` : `${holdings.length} holdings · delayed prices`} />
+            <MetricTile label="Current value" value={money(total)} sub={pending > 0 ? `${pending} still loading` : `${holdings.length} holdings · delayed prices${foreign.length ? ' · in ₹' : ''}`} />
             <MetricTile label="Invested" value={invested ? money(invested) : '—'} sub="quantity × average cost" />
             <MetricTile label="Overall P&L" value={invested ? money(total - invested) : '—'} sub={invested ? pct((total / invested - 1) * 100, 1, true) : ''}
               tone={invested ? (total >= invested ? 'pos' : 'neg') : undefined} />
@@ -109,6 +121,9 @@ export default function Portfolio() {
             <MetricTile label="In elevated/high risk" value={total ? pct((riskyValue / total) * 100, 0) : '—'} sub="share of value" tone={riskyValue > 0 ? 'warn' : undefined} />
           </div>
 
+          {foreign.length > 0 && (
+            <p className="text-xs text-muted">Totals, P&amp;L and weights in rupees. {foreign.map((c) => fx[c] ? `${c}/INR ${fx[c]!.rate.toFixed(2)} (Yahoo daily close, ${fx[c]!.as_of})` : `${c}/INR loading…`).join(' · ')}. P&amp;L in rupees includes currency moves only from today's rate, not from when you bought.</p>
+          )}
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <Card title="Holdings" actions={<label className="text-xs text-muted">Sort{' '}
               <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="ml-1 rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink">
@@ -128,8 +143,9 @@ export default function Portfolio() {
                           <td className="py-2"><Link to={`/c/${r.symbol}`} className="font-medium hover:text-accent">{r.s?.name || r.name || r.symbol}</Link>
                             <span className="block text-[11px] text-muted">{r.symbol}{r.s?.sector ? ` · ${r.s.sector}` : ''}</span></td>
                           <td className="num py-2 pl-4 text-right">{r.quantity.toLocaleString('en-IN')}</td>
-                          <td className="num py-2 pl-4 text-right">{price(r.avg_cost)}<span className="block text-[11px] text-muted">{price(r.s?.price)}</span></td>
-                          <td className="num py-2 pl-4 text-right">{money(r.value)}</td>
+                          <td className="num py-2 pl-4 text-right">{price(r.avg_cost, r.s?.currency)}<span className="block text-[11px] text-muted">{price(r.s?.price, r.s?.currency)}</span></td>
+                          <td className="num py-2 pl-4 text-right">{r.fxMissing ? <span className="text-xs text-warn">no FX rate</span> : money(r.value)}
+                            {r.s?.currency && r.s.currency !== 'INR' && r.native != null && <span className="block text-[11px] text-muted">{money(r.native, r.s.currency)}</span>}</td>
                           <td className={cx('num py-2 pl-4 text-right', isNum(r.pnl) && (r.pnl >= 0 ? 'text-pos' : 'text-neg'))}>{isNum(r.pnl) ? money(r.pnl) : '—'}<span className="block text-[11px]">{pct(r.pnl_pct, 1, true)}</span></td>
                           <td className="num py-2 pl-4 text-right">{pct(r.weight, 1)}</td>
                           {st?.error ? <td colSpan={3} className="py-2 pl-4 text-xs text-warn">{st.error}</td> : !r.s ? (

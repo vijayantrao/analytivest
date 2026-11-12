@@ -140,6 +140,37 @@ def _maybe_refresh_quote(symbol: str, bundle: dict[str, Any]) -> None:
         bundle["quote_freshness"] = _freshness(qt, config.TTL["quote"], "stale-cache", str(e))
 
 
+FX_TTL = 6 * 3600
+
+
+def fx_rate(pair: str) -> dict[str, Any]:
+    """Latest daily close of a currency pair such as USDINR (Yahoo "USDINR=X"), cached for 6 hours.
+    Used to add holdings in different currencies together; never used to restate statements."""
+    key = f"fx:{pair}"
+    cached = db.cache_get(key)
+    if cached and time.time() - cached["fetched_at"] < FX_TTL:
+        return {**cached["payload"], "served_from": "cache"}
+    if not config.OFFLINE:
+        try:
+            import yfinance as yf
+
+            from .yahoo import _throttle
+            _throttle()
+            h = yf.Ticker(f"{pair}=X").history(period="5d")
+            closes = [(i, float(r["Close"])) for i, r in h.iterrows() if r["Close"] == r["Close"]]
+            if closes:
+                when, rate = closes[-1]
+                payload = {"pair": pair, "rate": round(rate, 4), "as_of": str(when.date()),
+                           "source": "Yahoo Finance FX (daily close)"}
+                db.cache_put(key, "fx", payload, "yahoo")
+                return {**payload, "served_from": "live"}
+        except Exception as e:  # fall back to an older cached rate below
+            log.warning("FX %s failed: %s", pair, e)
+    if cached:
+        return {**cached["payload"], "served_from": "stale-cache"}
+    raise ProviderError(f"No exchange rate available for {pair}.", retryable=True)
+
+
 def get_prices(symbol: str) -> dict[str, Any]:
     symbol = validate_symbol(symbol)
     key = f"prices:{symbol}"

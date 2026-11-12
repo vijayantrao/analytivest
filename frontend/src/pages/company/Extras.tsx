@@ -221,7 +221,7 @@ export function MlAnomalyCard({ symbol }: { symbol: string }) {
           <div className="space-y-3 text-[13px]">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={ML_LEVEL[d.level].tone}>{ML_LEVEL[d.level].label}</Badge>
-              <span className="text-ink-2">Its accounting signals are more unusual than {Math.floor(d.percentile)}% of the {d.n} companies the model learned from.</span>
+              <span className="text-ink-2">Its accounting signals are more unusual than {Math.floor(d.percentile)}% of the {d.n} {d.market === 'US' ? 'US' : 'Indian'} companies the model learned from.</span>
             </div>
             {d.reasons.length > 0 ? (
               <div>

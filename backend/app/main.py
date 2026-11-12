@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, field_validator
 from . import alerts, backup, backup_crypto, config, db, screener
 from .analysis import analyse, summary_row
 from .ingest.annual_report import parse_annual_report
+from .markets import market_for_symbol
 from .ml import anomaly
 from .ml.features import extract as extract_ml_features
 from .ingest.screener_import import ImportError_, parse_screener_export
@@ -651,8 +652,14 @@ def portfolio_add(body: HoldingIn):
     return {"ok": True}
 
 
+@app.get("/api/fx")
+def fx(pair: str = Query(..., pattern="^[A-Z]{6}$")):
+    return registry.fx_rate(pair)
+
+
 @app.post("/api/portfolio/import")
-def portfolio_import(file: UploadFile = File(...), mode: str = Query("replace", pattern="^(replace|merge)$")):
+def portfolio_import(file: UploadFile = File(...), mode: str = Query("replace", pattern="^(replace|merge)$"),
+                     market: str = Query("IN", pattern="^(IN|US)$")):
     try:
         parsed = parse_holdings(_read_upload(file), file.filename or "holdings")
     except HoldingsError as e:
@@ -661,7 +668,7 @@ def portfolio_import(file: UploadFile = File(...), mode: str = Query("replace", 
         db.holdings_clear()
     added, unresolved = [], []
     for it in parsed["items"]:
-        sym, note = resolve_symbol(it, registry.search)
+        sym, note = resolve_symbol(it, registry.search, market)
         if not sym:
             unresolved.append({"name": it["raw"], "reason": note})
             continue
@@ -738,19 +745,20 @@ def job(job_id: str):
 class ScanIn(BaseModel):
     size: int = Field(100, ge=10, le=500)
     include_peers: bool = False
+    market: str = Field("IN", pattern="^(IN|US)$")
 
 
-def _ml_scores(scan_rows: list[dict[str, Any]]) -> tuple[Optional[anomaly.Fitted], dict[str, dict[str, Any]]]:
-    fitted, rows = anomaly.fitted_for(scan_rows)
+def _ml_scores(scan_rows: list[dict[str, Any]], market: str) -> tuple[Optional[anomaly.Fitted], dict[str, dict[str, Any]]]:
+    fitted, rows = anomaly.fitted_for(scan_rows, market)
     if fitted is None:
         return None, {}
     return fitted, {r["symbol"]: anomaly.score(fitted, r["features"]) for r in rows}
 
 
 @app.get("/api/screener")
-def screener_results():
-    rows = db.scan_list()
-    _, ml = _ml_scores(rows)
+def screener_results(market: str = Query("IN", pattern="^(IN|US)$")):
+    rows = [r for r in db.scan_list() if screener.market_of(r) == market]
+    _, ml = _ml_scores(rows, market)
     return {"results": rows, "job": db.job_latest("scan"),
             "ml": {k: {"percentile": v["percentile"], "level": v["level"], "reasons": [r["text"] for r in v["reasons"]]}
                    for k, v in ml.items() if v["available"]},
@@ -759,12 +767,12 @@ def screener_results():
 
 
 @app.get("/api/ml/anomalies")
-def ml_anomalies():
-    """The whole scanned universe ranked by the earnings-quality anomaly model."""
+def ml_anomalies(market: str = Query("IN", pattern="^(IN|US)$")):
+    """The whole scanned universe of one market ranked by the earnings-quality anomaly model."""
     scan_rows = db.scan_list()
-    fitted, scores = _ml_scores(scan_rows)
+    fitted, scores = _ml_scores(scan_rows, market)
     if fitted is None:
-        usable = sum(1 for r in anomaly.universe_rows(scan_rows) if anomaly.usable(r["features"]))
+        usable = sum(1 for r in anomaly.universe_rows(scan_rows, market) if anomaly.usable(r["features"]))
         return {"available": False, "model": anomaly.MODEL_CARD,
                 "reason": f"The model needs at least {anomaly.MIN_UNIVERSE} non-financial companies with enough data "
                           f"from a screener scan; {usable} available. Run a scan of 100+ companies."}
@@ -778,18 +786,20 @@ def ml_anomalies():
 @app.get("/api/company/{symbol}/anomaly")
 def company_anomaly(symbol: str):
     sym = registry.validate_symbol(symbol)
+    market = market_for_symbol(sym)
     scan_rows = db.scan_list()
-    fitted, rows = anomaly.fitted_for(scan_rows)
+    fitted, rows = anomaly.fitted_for(scan_rows, market.code)
     if fitted is None:
-        return {"available": False, "model": anomaly.MODEL_CARD,
-                "reason": f"Run a screener scan (100+ companies) first: the model learns what is normal from at least "
-                          f"{anomaly.MIN_UNIVERSE} scanned companies."}
+        return {"available": False, "model": anomaly.MODEL_CARD, "market": market.code,
+                "reason": f"Run a screener scan of 100+ {market.name} companies first: the model compares a company "
+                          f"only with its own market and needs at least {anomaly.MIN_UNIVERSE} scanned companies."}
     row = next((r for r in rows if r["symbol"] == sym), None)
     features = row["features"] if row else extract_ml_features(analyse(sym))
     if features is None:
         return {"available": False, "model": anomaly.MODEL_CARD,
                 "reason": "Not applied to banks and other financials: their accounts do not fit these features."}
-    return {**anomaly.score(fitted, features), "n": fitted.n, "in_universe": row is not None, "model": anomaly.MODEL_CARD}
+    return {**anomaly.score(fitted, features), "n": fitted.n, "in_universe": row is not None, "market": market.code,
+            "market_name": market.name, "model": anomaly.MODEL_CARD}
 
 
 @app.post("/api/screener/scan")
@@ -799,7 +809,7 @@ def screener_scan(body: ScanIn):
     j = db.job_latest("scan")
     if j and j["status"] in ("queued", "running"):
         raise HTTPException(409, "A scan is already running.")
-    return {"job_id": screener.start(body.size, body.include_peers)}
+    return {"job_id": screener.start(body.size, body.include_peers, body.market)}
 
 
 @app.post("/api/screener/cancel")

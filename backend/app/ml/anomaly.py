@@ -148,30 +148,33 @@ def score(fitted: Fitted, features: dict[str, Optional[float]]) -> dict[str, Any
 
 
 # ---------------- universe from screener scans (cached per scan state) ----------------
-_cache: dict[str, Any] = {"key": None, "fitted": None}
+# One model per market: a US company is only ever compared with US companies, an Indian one with Indian ones.
+_cache: dict[str, tuple[str, Optional[Fitted]]] = {}
 _cache_lock = threading.Lock()
 
 
-def universe_rows(scan_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def universe_rows(scan_rows: list[dict[str, Any]], market: str = "IN") -> list[dict[str, Any]]:
+    from ..screener import market_of
     return [{"symbol": r["symbol"], "name": r["summary"].get("name"), "features": r["summary"].get("ml_features"),
              "flag_ids": r["summary"].get("flag_ids", [])}
-            for r in scan_rows if r["summary"].get("ml_features")]
+            for r in scan_rows if r["summary"].get("ml_features") and market_of(r) == market]
 
 
-def fitted_for(scan_rows: list[dict[str, Any]]) -> tuple[Optional[Fitted], list[dict[str, Any]]]:
-    rows = universe_rows(scan_rows)
+def fitted_for(scan_rows: list[dict[str, Any]], market: str = "IN") -> tuple[Optional[Fitted], list[dict[str, Any]]]:
+    rows = universe_rows(scan_rows, market)
     key = hashlib.sha1(json.dumps([[r["symbol"], r["features"]] for r in rows], sort_keys=True).encode()).hexdigest()
     with _cache_lock:
-        if _cache["key"] != key:
-            _cache.update(key=key, fitted=fit(rows))
-        return _cache["fitted"], rows
+        if market not in _cache or _cache[market][0] != key:
+            _cache[market] = (key, fit(rows))
+        return _cache[market][1], rows
 
 
 MODEL_CARD = {
     "name": "Earnings-quality anomaly detector",
     "algorithm": f"scikit-learn IsolationForest ({N_ESTIMATORS} trees, random_state={SEED}) on robust z-scores of the "
                  "risky direction of each signal, log-compressed",
-    "trained_on": "the companies in your latest screener scan (banks and other financials excluded)",
+    "trained_on": "the companies of the same market (India or US) in your screener scans, banks and other financials "
+                  "excluded",
     "features": [{"name": k, "label": v[0], "unit": v[1], "rule": v[4]} for k, v in FEATURES.items()],
     "levels": f"top {100 - UNUSUAL_PCT:.0f}% of the universe = unusual, top {100 - HIGHLY_UNUSUAL_PCT:.0f}% = highly unusual",
     "limits": "Unsupervised: 'unusual' means unlike its peers, not 'manipulated'. Small universes and Yahoo's 4-5 years "

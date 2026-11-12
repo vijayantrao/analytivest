@@ -149,7 +149,7 @@ def real_world_overlap(rows: list[dict[str, Any]], one_sided: bool = True) -> di
     }
 
 
-def report(ev: dict[str, Any], real: dict[str, Any], v1: dict[str, Any] | None = None) -> str:
+def report(ev: dict[str, Any], real: dict[str, Any], v1: dict[str, Any] | None = None, market: str = "IN") -> str:
     rows = "\n".join(
         f"| {p['description']} | {p['roc_auc']:.2f} | {p['model_detection']:.0%} | {p['rule_detection']:.0%} | {p['either_detection']:.0%} |"
         for p in ev["patterns"].values())
@@ -171,8 +171,8 @@ def report(ev: dict[str, Any], real: dict[str, Any], v1: dict[str, Any] | None =
         "on a later scan or a larger universe.", "", ""])
     return f"""# ML evaluation: earnings-quality anomaly detector
 
-Generated {date.today().isoformat()} by `python -m app.ml.evaluate` on {ev['companies']} non-financial companies
-from the screener scan ({ev['folds']}-fold cross-validation, seed {ev['seed']}). Re-run it after a new scan;
+Generated {date.today().isoformat()} by `python -m app.ml.evaluate --market {market}` on {ev['companies']}
+non-financial {"Indian" if market == "IN" else "US"} companies from the screener scan ({ev['folds']}-fold cross-validation, seed {ev['seed']}). Re-run it after a new scan;
 numbers change with the universe.
 
 ## Model
@@ -218,17 +218,20 @@ The model marks **{real['model_flagged']} of {real['scored']}** companies unusua
 def main(argv: list[str] | None = None) -> int:
     from .. import db
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--out", default=str(Path(__file__).resolve().parents[3] / "docs" / "ML_EVALUATION.md"))
+    ap.add_argument("--market", default="IN", choices=["IN", "US"])
+    ap.add_argument("--out", help="default: docs/ML_EVALUATION.md (India) or docs/ML_EVALUATION_US.md")
     args = ap.parse_args(argv)
-    rows = anomaly.universe_rows(db.scan_list())
+    docs = Path(__file__).resolve().parents[3] / "docs"
+    args.out = args.out or str(docs / ("ML_EVALUATION.md" if args.market == "IN" else "ML_EVALUATION_US.md"))
+    rows = anomaly.universe_rows(db.scan_list(), args.market)
     try:
         ev = evaluate(rows)
     except ValueError as e:
-        print(f"Cannot evaluate: {e} Run a screener scan of 100+ companies first.", file=sys.stderr)
+        print(f"Cannot evaluate: {e} Run a screener scan of 100+ {args.market} companies first.", file=sys.stderr)
         return 1
     v1 = evaluate(rows, one_sided=False)
     real = real_world_overlap(rows)
-    Path(args.out).write_text(report(ev, real, v1), encoding="utf-8")
+    Path(args.out).write_text(report(ev, real, v1, args.market), encoding="utf-8")
     print(f"Wrote {args.out}")
     for p in ev["patterns"].values():
         print(f"  AUC {p['roc_auc']:.2f}  model {p['model_detection']:.0%}  rules {p['rule_detection']:.0%}  {p['description']}")

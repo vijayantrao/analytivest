@@ -140,7 +140,8 @@ etc.) that free sources do not provide. They are always labelled "User-entered" 
 | GET | `/ipos/{id}/analysis` | IPO evaluation |
 | GET | `/methodology` | Live scoring config + rule descriptions (inspectable) |
 | GET | `/glossary` | Metric explanations |
-| GET | `/ml/anomalies` | Scanned universe ranked by the earnings-quality anomaly model, with reasons and rule flags |
+| GET | `/ml/anomalies?market=IN\|US` | Scanned universe of one market ranked by the anomaly model, with reasons and rule flags |
+| GET | `/fx?pair=USDINR` | Latest daily FX close (6 h cache) for converting portfolio totals to rupees |
 | GET | `/company/{symbol}/anomaly` | One company scored against the scanned universe |
 | GET | `/session` | Per-start session token (the only endpoint that does not need it) |
 | GET | `/backup` | Download a JSON backup of all user data |

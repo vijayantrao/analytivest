@@ -111,6 +111,8 @@ export interface SearchGroup {
   listings: { symbol: string; exchange?: string }[]
 }
 
+export type Market = 'IN' | 'US'
+
 export interface BackupSettings {
   auto: boolean
   folder: string
@@ -166,9 +168,10 @@ export const api = {
   alertsSettings: (enabled: boolean, time: string) =>
     request<any>('/api/alerts/settings', { method: 'PUT', body: JSON.stringify({ enabled, time }) }),
   job: (id: string) => request<any>(`/api/jobs/${encodeURIComponent(id)}`),
-  screener: () => request<any>('/api/screener'),
-  scan: (size: number, include_peers: boolean) =>
-    request<{ job_id: string }>('/api/screener/scan', { method: 'POST', body: JSON.stringify({ size, include_peers }) }),
+  screener: (market: Market = 'IN') => request<any>(`/api/screener?market=${market}`),
+  scan: (size: number, include_peers: boolean, market: Market = 'IN') =>
+    request<{ job_id: string }>('/api/screener/scan', { method: 'POST', body: JSON.stringify({ size, include_peers, market }) }),
+  fx: (pair: string) => request<{ pair: string; rate: number; as_of: string; source: string }>(`/api/fx?pair=${pair}`),
   scanCancel: () => request<any>('/api/screener/cancel', { method: 'POST' }),
   backupStatus: () => request<any>('/api/backup/status'),
   backupDownload: () => download('/api/backup', 'analytivest-backup.json'),
@@ -183,7 +186,7 @@ export const api = {
   backupRestoreFile: (name: string, location: 'local' | 'gdrive', password?: string) =>
     request<any>('/api/backup/restore-file', { method: 'POST', body: JSON.stringify({ name, location, password }) }),
   backupPurgePlainCloud: () => request<{ deleted: number }>('/api/backup/purge-plain-cloud', { method: 'POST' }),
-  mlAnomalies: () => request<any>('/api/ml/anomalies'),
+  mlAnomalies: (market: Market = 'IN') => request<any>(`/api/ml/anomalies?market=${market}`),
   companyAnomaly: (symbol: string) => request<any>(`/api/company/${encodeURIComponent(symbol)}/anomaly`),
   methodology: () => request<any>('/api/methodology'),
   glossary: () => request<any>('/api/glossary'),

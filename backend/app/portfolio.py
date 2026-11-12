@@ -123,14 +123,19 @@ def parse_holdings(data: bytes, filename: str = "holdings.csv") -> dict[str, Any
 
 
 TICKER_RE = re.compile(r"^[A-Z0-9&\-]{1,20}$")
+US_TICKER_RE = re.compile(r"^[A-Z]{1,5}([.\-][A-Z]{1,2})?$")
 
 
-def resolve_symbol(item: dict[str, Any], search) -> tuple[Optional[str], Optional[str]]:
-    """Return (yahoo_symbol, note). `search(q)` is the app's search function (grouped results)."""
+def resolve_symbol(item: dict[str, Any], search, market: str = "IN") -> tuple[Optional[str], Optional[str]]:
+    """Return (yahoo_symbol, note). `search(q)` is the app's search function (grouped results).
+    market: the broker's market. Indian tickers get the NSE suffix; US tickers stay plain (class shares such as
+    BRK.B use Yahoo's dash form, BRK-B)."""
     hint = (item.get("symbol_hint") or "").upper().strip()
     if hint.endswith((".NS", ".BO")) or hint.startswith("DEMO-"):
         return hint, None
-    if hint and TICKER_RE.match(hint):
+    if market == "US" and hint and US_TICKER_RE.match(hint):
+        return hint.replace(".", "-"), None
+    if market == "IN" and hint and TICKER_RE.match(hint):
         base = re.sub(r"-(EQ|BE|BZ|SM|ST)$", "", hint)  # strip NSE series suffixes
         return f"{base}.NS", None
     q = item.get("name") or item.get("raw")
@@ -140,8 +145,8 @@ def resolve_symbol(item: dict[str, Any], search) -> tuple[Optional[str], Optiona
         res = search(q).get("results", [])
     except Exception as e:  # offline / provider down
         return None, f"lookup failed: {e}"
-    india = [g for g in res if g.get("market") == "IN" and not g.get("is_sample")]
-    if not india:
-        return None, "no NSE/BSE match found"
-    return india[0]["primary_symbol"], (f"matched by name to {india[0]['name']}" if len(india) == 1 else
-                                        f"best of {len(india)} name matches: {india[0]['name']}")
+    found = [g for g in res if g.get("market") == market and not g.get("is_sample")]
+    if not found:
+        return None, "no NSE/BSE match found" if market == "IN" else "no NYSE/NASDAQ match found"
+    return found[0]["primary_symbol"], (f"matched by name to {found[0]['name']}" if len(found) == 1 else
+                                        f"best of {len(found)} name matches: {found[0]['name']}")

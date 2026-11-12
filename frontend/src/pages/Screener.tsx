@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Play, Square } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Card, EmptyState, ErrorState, Segmented, Skeleton, cx } from '../components/ui'
-import { api } from '../lib/api'
+import { api, type Market } from '../lib/api'
 import { dateTime, isNum, money, pct, ratio } from '../lib/format'
 import { JobProgress, useJob } from './Alerts'
 import { ML_LEVEL } from './company/Extras'
@@ -23,7 +23,9 @@ type SortKey = 'market_cap' | 'business_quality' | 'financial_risk' | 'valuation
 
 export default function Screener() {
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: ['screener'], queryFn: api.screener })
+  const [market, setMarket] = useState<Market>(() => { try { return (localStorage.getItem('screener-market') as Market) || 'IN' } catch { return 'IN' } })
+  const chooseMarket = (m: Market) => { setMarket(m); try { localStorage.setItem('screener-market', m) } catch { /* private mode */ } }
+  const q = useQuery({ queryKey: ['screener', market], queryFn: () => api.screener(market) })
   const [size, setSize] = useState('100')
   const [peers, setPeers] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
@@ -31,7 +33,7 @@ export default function Screener() {
   const [preset, setPreset] = useState('quality')
   const [f, setF] = useState<F>({ ...BLANK, ...PRESETS.quality.f })
   const [sort, setSort] = useState<{ k: SortKey; desc: boolean }>({ k: 'business_quality', desc: true })
-  const scan = useMutation({ mutationFn: () => api.scan(Number(size), peers), onSuccess: (d) => setJobId(d.job_id) })
+  const scan = useMutation({ mutationFn: () => api.scan(Number(size), peers, market), onSuccess: (d) => setJobId(d.job_id) })
   const cancel = useMutation({ mutationFn: api.scanCancel })
   useEffect(() => { if (q.data?.job && ['queued', 'running'].includes(q.data.job.status) && !jobId) setJobId(q.data.job.id) }, [q.data, jobId])
   useEffect(() => { if (job.data) qc.invalidateQueries({ queryKey: ['screener'] }) }, [job.data?.progress, job.data?.status, qc])
@@ -81,10 +83,13 @@ export default function Screener() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Stock screener</h1>
-        <p className="max-w-3xl text-[13px] text-ink-2">Scan the largest Indian listed companies through the same three verdicts, then filter. Scanning uses the free data provider politely, so it runs in the background; results are kept and re-scanned after 24 hours.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold">Stock screener</h1>
+          <Segmented label="Market" value={market} onChange={chooseMarket} options={[{ value: 'IN', label: 'India (NSE/BSE)' }, { value: 'US', label: 'US (NYSE/NASDAQ)' }]} />
+        </div>
+        <p className="max-w-3xl text-[13px] text-ink-2">Scan the largest {market === 'IN' ? 'Indian' : 'US'} listed companies through the same three verdicts, then filter. Each market is scanned and filtered separately, and the ML check compares companies only with their own market. Scanning uses the free data provider politely, so it runs in the background; results are kept and re-scanned after 24 hours.</p>
       </div>
-      <Card title="Scan" subtitle={lastScan ? `${rows.length} companies scanned · latest ${dateTime(lastScan)}` : 'No scan yet.'}>
+      <Card title={`Scan ${market === 'IN' ? 'India' : 'US'}`} subtitle={lastScan ? `${rows.length} companies scanned · latest ${dateTime(lastScan)}` : `No ${market === 'IN' ? 'Indian' : 'US'} scan yet.`}>
         <div className="flex flex-wrap items-center gap-3">
           <Segmented label="Universe size" value={size} onChange={setSize} options={['50', '100', '200', '500'].map((v) => ({ value: v, label: `Top ${v}` }))} />
           <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={peers} onChange={(e) => setPeers(e.target.checked)} /> Include peer comparison (slower; matches company pages)</label>

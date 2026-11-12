@@ -261,7 +261,7 @@ def test_alert_check_records_baseline_then_detects_change(client, monkeypatch):
 
 # ---------------- Screener scan ----------------
 def test_scan_job_stores_summaries(monkeypatch):
-    monkeypatch.setattr(screener, "universe", lambda size: [{"symbol": s, "name": s} for s in
+    monkeypatch.setattr(screener, "universe", lambda size, market="IN": [{"symbol": s, "name": s} for s in
                                                             ("DEMO-STEADY", "DEMO-LEVER", "DEMO-BANK")][:size])
     screener.run_scan("scan-test", 3, include_peers=False)
     job = db.job_get("scan-test")

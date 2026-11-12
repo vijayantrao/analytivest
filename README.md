@@ -50,7 +50,7 @@ No API keys are needed. Optional settings are documented in [`.env.example`](.en
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest            # 116 offline tests (formulas, scoring, valuation, IPO, imports, portfolio, alerts, security, backup, ML, API)
+.\.venv\Scripts\python -m pytest            # 121 offline tests (formulas, scoring, valuation, IPO, imports, portfolio, alerts, security, backup, ML, US, API)
 .\.venv\Scripts\python -m pytest --live     # + 4 integration tests against real Yahoo Finance data
 cd ..\frontend
 npm run build                               # type-checks (tsc) and builds the UI
@@ -64,6 +64,9 @@ tabs, DCF editing, watchlist, IPO, compare, mobile layout, light/dark theme) wer
 - **Search** by name or symbol (`TCS`, `HDFC Bank`, `RELIANCE.NS`). Numeric BSE codes such as `500325` are not
   supported by the provider; use `RELIANCE.BO` for the BSE listing.
   NSE and BSE listings of the same company are grouped, with NSE used by default.
+- **US stocks:** type a plain ticker (`AAPL`, `MSFT`, `BRK-B`). They get the same analysis in USD with US defaults
+  (21% tax, 9% cost of equity, 3% terminal growth, all editable), a US screener universe, a separate US ML model, and
+  US holdings in the portfolio (totals converted to rupees at the latest USD/INR close).
 - **Company page tabs:** Overview · Financials · Growth & profitability · Debt & balance sheet · Cash flow · Valuation
   (editable DCF with sensitivity) · Management & shareholding (enter pledge/auditor/litigation facts yourself) · Peers ·
   Risks & red flags · News & disclosures · Analysis (rule-based narrative and full score breakdown).
@@ -192,8 +195,9 @@ a licensed data provider (Yahoo's terms are personal-use only), PostgreSQL and a
   from occlusion attributions. Shown on the *Risks* tab and as an *ML check* column / *Unusual accounts (ML)* preset in
   the screener. It complements the rule-based flags; `python -m app.ml.evaluate` measures both on injected
   distortions with cross-validation and writes [`docs/ML_EVALUATION.md`](docs/ML_EVALUATION.md) (`app/ml/`).
-- **Stock screener** (`/screener`): background scan of the top 50–500 Indian companies by market cap, then presets
-  (quality at a fair price, undervalued, low-risk dividend payers, red-flag watch) and filters (`app/screener.py`).
+- **Stock screener** (`/screener`): background scan of the top 50–500 companies by market cap in **India or the US**
+  (switch at the top; each market is scanned and filtered separately), then presets (quality at a fair price,
+  undervalued, low-risk dividend payers, red-flag watch, unusual accounts) and filters (`app/screener.py`).
 - **Data & security** (`/settings`): backups (download, weekly automatic, optional Google Drive copy, restore with a
   safety copy), data location
   and security status
@@ -215,8 +219,12 @@ a licensed data provider (Yahoo's terms are personal-use only), PostgreSQL and a
 - **Not available from free sources:** shareholding history and FII/DII split, segment/geographic revenue, live IPO
   calendars, subscription and GMP. Pledges, auditor remarks, contingent liabilities and bank NPA/CAR come from documents
   you upload or figures you enter.
-- **Not implemented:** SEC EDGAR provider for US, news beyond what Yahoo returns (often none for Indian stocks),
-  server-generated PDFs.
+- **US coverage:** company analysis, screener, ML check and portfolio work for US stocks. The IPO module and the
+  RHP/DRHP reader follow SEBI documents (not US S-1 filings); the annual-report reader, Screener.in import and bank
+  inputs (GNPA, RBI capital minimum) are India-specific. Portfolio P&L in rupees uses today's USD/INR rate for the
+  cost too, so it leaves out currency gains since purchase.
+- **Not implemented:** SEC EDGAR provider for US (US data comes from Yahoo only), news beyond what Yahoo returns
+  (often none for Indian stocks), server-generated PDFs.
 - **Speed:** a company's first load takes about 10–40 seconds (statements, prices and peer ratios); later loads come from the cache.
 - **FX conversion** uses period-end rates for flows (an approximation), so growth includes currency effects.
 - **Windows long paths:** in very deep folders, `curl_cffi` (used by yfinance) may fail to load. yfinance then falls back
