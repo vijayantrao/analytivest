@@ -26,8 +26,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
           cache: pip
@@ -41,6 +41,17 @@ jobs:
         shell: bash
         run: |
           echo "### Coverage (${{ matrix.os }}): $(python -m coverage report --format=total)%" >> "$GITHUB_STEP_SUMMARY"
+      - name: Report failed tests as annotations
+        if: failure()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          for case in ET.parse("test-results.xml").iter("testcase"):
+              for f in case.findall("failure") + case.findall("error"):
+                  detail = " ".join((f.text or f.get("message") or "").split())[-600:]
+                  print(f"::error title={case.get('classname')}.{case.get('name')}::{detail}")
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -56,8 +67,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: npm
