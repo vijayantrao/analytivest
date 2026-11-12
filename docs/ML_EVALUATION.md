@@ -1,7 +1,7 @@
 # ML evaluation: earnings-quality anomaly detector
 
-Generated 2026-11-12 by `python -m app.ml.evaluate` on 147 non-financial companies
-from the screener scan (5-fold cross-validation, seed 0). Re-run it after a new scan;
+Generated 2026-11-12 by `python -m app.ml.evaluate --market IN` on 147
+non-financial Indian companies from the screener scan (5-fold cross-validation, seed 0). Re-run it after a new scan;
 numbers change with the universe.
 
 ## Model
@@ -67,8 +67,8 @@ tails with log1p and puts a floor under each feature's scale. Distortions and pr
 
 False alarms: v1 11%, v2 14%.
 
-v2 was designed after seeing v1's results on this universe, so its numbers are optimistic until confirmed
-on a later scan or a larger universe.
+v2 was designed after seeing v1's results on this Indian universe, so these numbers are optimistic; the
+US evaluation (`--market US`, docs/ML_EVALUATION_US.md) is the independent check.
 
 ## Limitations
 

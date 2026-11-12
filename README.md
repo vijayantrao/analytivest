@@ -1,6 +1,8 @@
-# Analytivest: stock & IPO research for Indian markets
+# Analytivest: stock & IPO research for Indian and US markets
 
-A personal, locally-run research tool for NSE/BSE-listed companies and IPOs. It works with free data only and reports
+[![CI](https://github.com/vijayantrao/analytivest/actions/workflows/ci.yml/badge.svg)](https://github.com/vijayantrao/analytivest/actions/workflows/ci.yml)
+
+A personal, locally-run research tool for NSE/BSE-listed companies and IPOs, and for US (NYSE/NASDAQ) stocks. It works with free data only and reports
 **three separate verdicts** rather than a buy/sell score:
 
 | Verdict | Question |
@@ -194,7 +196,9 @@ a licensed data provider (Yahoo's terms are personal-use only), PostgreSQL and a
   inventory, balance-sheet growth, one-off gains, dilution) are unlike their peers, with per-company explanations
   from occlusion attributions. Shown on the *Risks* tab and as an *ML check* column / *Unusual accounts (ML)* preset in
   the screener. It complements the rule-based flags; `python -m app.ml.evaluate` measures both on injected
-  distortions with cross-validation and writes [`docs/ML_EVALUATION.md`](docs/ML_EVALUATION.md) (`app/ml/`).
+  distortions with cross-validation and writes [`docs/ML_EVALUATION.md`](docs/ML_EVALUATION.md) (India) and, with
+  `--market US`, [`docs/ML_EVALUATION_US.md`](docs/ML_EVALUATION_US.md), an independent check on a universe that played
+  no part in the model's design (`app/ml/`).
 - **Stock screener** (`/screener`): background scan of the top 50–500 companies by market cap in **India or the US**
   (switch at the top; each market is scanned and filtered separately), then presets (quality at a fair price,
   undervalued, low-risk dividend payers, red-flag watch, unusual accounts) and filters (`app/screener.py`).

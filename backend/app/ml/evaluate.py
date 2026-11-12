@@ -167,8 +167,10 @@ def report(ev: dict[str, Any], real: dict[str, Any], v1: dict[str, Any] | None =
         *[f"| {p['description'].split(':')[0]} | {p['roc_auc']:.2f} | {ev['patterns'][k]['roc_auc']:.2f} | "
           f"{p['model_detection']:.0%} | {ev['patterns'][k]['model_detection']:.0%} |" for k, p in v1["patterns"].items()],
         "", f"False alarms: v1 {v1['model_false_alarm']:.0%}, v2 {ev['model_false_alarm']:.0%}.", "",
-        "v2 was designed after seeing v1's results on this universe, so its numbers are optimistic until confirmed",
-        "on a later scan or a larger universe.", "", ""])
+        *(["v2 was designed after seeing v1's results on this Indian universe, so these numbers are optimistic; the",
+            "US evaluation (`--market US`, docs/ML_EVALUATION_US.md) is the independent check."] if market == "IN" else
+          ["v2 was designed on the Indian universe; this US universe played no part in it, so these results are an",
+           "independent check of that design."]), "", ""])
     return f"""# ML evaluation: earnings-quality anomaly detector
 
 Generated {date.today().isoformat()} by `python -m app.ml.evaluate --market {market}` on {ev['companies']}
