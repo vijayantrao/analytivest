@@ -1,0 +1,291 @@
+1
+0:00:00,300 --> 0:00:01,920
+Hello everyone!
+
+2
+0:00:01,870 --> 0:00:05,340
+In this video, I'll walk you through Analytivest.
+
+3
+0:00:05,340 --> 0:00:07,260
+Invest with evidence.
+
+4
+0:00:07,260 --> 0:00:12,400
+It's a data-led analysis app for Indian stocks and IPOs on
+
+5
+0:00:12,400 --> 0:00:13,470
+NSE and BSE.
+
+6
+0:00:13,470 --> 0:00:16,160
+First, the problems we all face.
+
+7
+0:00:16,160 --> 0:00:19,010
+Then, how Analytivest solves them.
+
+8
+0:00:19,460 --> 0:00:21,900
+Problem one: tips and hype.
+
+9
+0:00:21,850 --> 0:00:25,630
+WhatsApp forwards, Telegram calls, grey market premium and
+
+10
+0:00:25,630 --> 0:00:29,090
+subscription headlines push us into decisions without
+
+11
+0:00:29,090 --> 0:00:29,670
+evidence.
+
+12
+0:00:29,670 --> 0:00:33,420
+Problem two: data is scattered across annual reports,
+
+13
+0:00:33,420 --> 0:00:37,310
+exchange filings, websites, and five-hundred-page RHPs.
+
+14
+0:00:37,310 --> 0:00:41,400
+Problem three: most apps give one buy or sell rating, with
+
+15
+0:00:41,400 --> 0:00:43,590
+no reasons, and lots of jargon.
+
+16
+0:00:43,590 --> 0:00:46,160
+And problem four: hidden traps.
+
+17
+0:00:46,160 --> 0:00:49,840
+Bonus issues distort EPS, some companies report in
+
+18
+0:00:49,840 --> 0:00:54,100
+dollars, one-time gains inflate profits, and sometimes the
+
+19
+0:00:54,100 --> 0:00:55,640
+data itself is wrong.
+
+20
+0:00:56,100 --> 0:00:59,280
+Analytivest gives you three separate verdicts.
+
+21
+0:00:59,230 --> 0:01:02,050
+Business quality: is the company strong?
+
+22
+0:01:02,050 --> 0:01:05,150
+Financial risk: how vulnerable is it?
+
+23
+0:01:05,150 --> 0:01:07,960
+And valuation: is the price reasonable?
+
+24
+0:01:07,960 --> 0:01:11,740
+Every number shows its source, period and formula.
+
+25
+0:01:12,190 --> 0:01:15,560
+Just type a company name or NSE symbol.
+
+26
+0:01:15,510 --> 0:01:19,870
+If the same company is listed on NSE and BSE, it groups
+
+27
+0:01:19,870 --> 0:01:22,960
+them together, with NSE as the default.
+
+28
+0:01:23,410 --> 0:01:25,320
+Here is TCS.
+
+29
+0:01:25,270 --> 0:01:29,590
+On top, the summary: strong fundamentals, with confidence
+
+30
+0:01:29,590 --> 0:01:31,260
+and data completeness.
+
+31
+0:01:31,260 --> 0:01:34,340
+Click why this score, to see what drove it.
+
+32
+0:01:34,340 --> 0:01:38,030
+The fair-value range shows where today's price sits.
+
+33
+0:01:38,030 --> 0:01:42,220
+Below, price and profit trends, plus positive factors and
+
+34
+0:01:42,220 --> 0:01:44,940
+major risks, each backed by evidence.
+
+35
+0:01:45,410 --> 0:01:47,460
+Every tab goes deeper.
+
+36
+0:01:47,410 --> 0:01:50,880
+Financials, growth, debt and cash flow.
+
+37
+0:01:50,880 --> 0:01:54,740
+Each chart has period selectors and a table view, and
+
+38
+0:01:54,740 --> 0:01:58,520
+every jargon term has a simple explanation on hover.
+
+39
+0:01:58,980 --> 0:02:02,840
+In valuation, you get multiples with their basis, the
+
+40
+0:02:02,840 --> 0:02:06,410
+historical P/E band, and a DCF you can edit live.
+
+41
+0:02:06,360 --> 0:02:10,390
+Change the growth rate, and the value and sensitivity grid
+
+42
+0:02:10,390 --> 0:02:11,570
+update instantly.
+
+43
+0:02:11,570 --> 0:02:15,570
+Peer comparison even catches bad provider data, and keeps
+
+44
+0:02:15,570 --> 0:02:17,180
+it out of the averages.
+
+45
+0:02:17,640 --> 0:02:21,100
+The risks tab is an automated red-flag system.
+
+46
+0:02:21,050 --> 0:02:24,770
+For this sample company, it catches negative free cash
+
+47
+0:02:24,770 --> 0:02:28,140
+flow, weak cash conversion, exceptional gains and
+
+48
+0:02:28,140 --> 0:02:31,580
+dilution, each with evidence, severity and period.
+
+49
+0:02:31,580 --> 0:02:34,450
+Signals to check, not accusations.
+
+50
+0:02:34,910 --> 0:02:36,900
+And those hidden traps?
+
+51
+0:02:36,850 --> 0:02:41,460
+HDFC Bank gets a bank-specific model, with its bonus issue
+
+52
+0:02:41,460 --> 0:02:42,180
+adjusted.
+
+53
+0:02:42,180 --> 0:02:45,670
+Infosys's dollar figures are converted to rupees.
+
+54
+0:02:45,670 --> 0:02:49,580
+And demerger gains are excluded, so profit reflects the
+
+55
+0:02:49,580 --> 0:02:51,000
+continuing business.
+
+56
+0:02:51,460 --> 0:02:53,800
+Now, the IPO module.
+
+57
+0:02:53,750 --> 0:02:58,970
+Upload the RHP or DRHP in any format: PDF, Word, even
+
+58
+0:02:58,970 --> 0:03:00,440
+scanned images.
+
+59
+0:03:00,440 --> 0:03:04,380
+Analytivest extracts the price band, fresh issue versus
+
+60
+0:03:04,380 --> 0:03:08,530
+offer for sale, financials, peers and risks, and shows the
+
+61
+0:03:08,530 --> 0:03:10,530
+exact page for every number.
+
+62
+0:03:10,530 --> 0:03:14,440
+Then you get a clear suggestion: apply, borderline or
+
+63
+0:03:14,440 --> 0:03:15,840
+skip, with reasons.
+
+64
+0:03:15,840 --> 0:03:19,960
+Grey market premium and subscription numbers are ignored
+
+65
+0:03:19,960 --> 0:03:20,770
+on purpose.
+
+66
+0:03:21,230 --> 0:03:24,880
+You also get side-by-side comparison of up to five
+
+67
+0:03:24,880 --> 0:03:28,680
+companies, a watchlist, saved snapshots, CSV and PDF
+
+68
+0:03:28,680 --> 0:03:32,180
+export, dark mode, and a mobile-friendly layout.
+
+69
+0:03:32,590 --> 0:03:36,950
+Remember, Analytivest is decision support, not investment
+
+70
+0:03:36,950 --> 0:03:37,490
+advice.
+
+71
+0:03:37,440 --> 0:03:39,480
+So that's Analytivest.
+
+72
+0:03:39,480 --> 0:03:41,400
+Invest with evidence.
+
+73
+0:03:41,400 --> 0:03:44,520
+Thanks for watching, and happy investing!

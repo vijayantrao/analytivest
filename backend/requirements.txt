@@ -1,0 +1,20 @@
+# Versions verified working on 2026-10-19 (Python 3.14, Windows 11)
+fastapi==0.146.0
+uvicorn[standard]==0.54.0
+yfinance==1.7.0
+pandas==3.0.6
+numpy==2.5.4
+# tests
+pytest==9.1.1
+httpx==0.28.1
+pytest-cov==7.1.0
+# RHP/DRHP upload: document parsing (+ optional offline OCR for scanned pages/images)
+python-multipart==0.0.32
+pymupdf==1.28.2
+# Earnings-quality anomaly model
+scikit-learn==1.9.1
+python-docx==1.2.0
+openpyxl==3.1.5
+rapidocr==3.10.0
+defusedxml==0.7.1  # hardens openpyxl's XML parsing (used automatically when installed)
+cryptography==50.0.2  # AES-256-GCM + scrypt for encrypted Google Drive backup copies

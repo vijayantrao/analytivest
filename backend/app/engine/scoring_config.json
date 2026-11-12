@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "notes": "Starting assumptions, not universal truths. Edit thresholds/weights here; the Methodology page shows the live values. 'points' are [input, score] pairs scored by linear interpolation and clamped at the ends.",
+  "composite_weights": {
+    "standard": {"growth": 20, "profitability": 20, "balance_sheet": 15, "cash_flow": 15, "valuation": 15, "governance": 10, "industry": 5},
+    "financial": {"growth": 15, "profitability": 25, "balance_sheet": 15, "asset_quality": 15, "valuation": 15, "governance": 10, "industry": 5}
+  },
+  "business_quality_weights": {
+    "standard": {"growth": 30, "profitability": 40, "cash_flow": 20, "governance": 10},
+    "financial": {"growth": 30, "profitability": 45, "asset_quality": 15, "governance": 10}
+  },
+  "min_category_completeness": 0.4,
+  "profiles": {
+    "default": {"leverage_tolerance": 1.0, "de_medium": 1.0, "de_high": 2.0, "nd_ebitda_medium": 3.0, "nd_ebitda_high": 4.0, "cash_conversion_warn": 0.8},
+    "capital_intensive": {
+      "match_sectors": ["Utilities", "Real Estate"],
+      "match_industries": ["Engineering & Construction", "Infrastructure Operations", "Telecom Services", "Oil & Gas Integrated", "Oil & Gas Midstream", "Marine Shipping", "Airlines", "Railroads", "Steel", "Building Materials"],
+      "leverage_tolerance": 1.5, "de_medium": 1.5, "de_high": 3.0, "nd_ebitda_medium": 4.0, "nd_ebitda_high": 5.5, "cash_conversion_warn": 0.7,
+      "description": "Asset-heavy businesses that normally carry more debt."
+    },
+    "asset_light": {
+      "match_industries": ["Information Technology Services", "Software - Application", "Software - Infrastructure", "Internet Content & Information"],
+      "leverage_tolerance": 0.8, "de_medium": 0.8, "de_high": 1.5, "nd_ebitda_medium": 2.0, "nd_ebitda_high": 3.0, "cash_conversion_warn": 0.8,
+      "description": "Low capital needs; debt is less normal and cash conversion should be high."
+    }
+  },
+  "categories": {
+    "standard": {
+      "growth": [
+        {"key": "revenue_cagr", "label": "Revenue CAGR (3y, else longest available)", "weight": 35, "points": [[-5, 0], [0, 20], [5, 45], [10, 70], [15, 85], [25, 100]]},
+        {"key": "eps_cagr", "label": "EPS CAGR (3y, else longest available)", "weight": 30, "points": [[-10, 0], [0, 20], [8, 50], [15, 75], [25, 100]]},
+        {"key": "revenue_growth_stdev", "label": "Volatility of yearly revenue growth (std. dev., pp)", "weight": 15, "points": [[3, 100], [8, 75], [15, 45], [30, 10]]},
+        {"key": "revenue_decline_years", "label": "Years with falling revenue", "weight": 10, "points": [[0, 100], [1, 60], [2, 30], [3, 0]]},
+        {"key": "revenue_growth_latest", "label": "Latest-year revenue growth", "weight": 10, "points": [[-10, 0], [0, 25], [8, 55], [15, 80], [25, 100]]}
+      ],
+      "profitability": [
+        {"key": "roe_avg3", "label": "Average ROE (last 3 years)", "weight": 30, "points": [[0, 0], [8, 30], [12, 55], [18, 80], [25, 100]]},
+        {"key": "roce_avg3", "label": "Average ROCE (last 3 years)", "weight": 25, "points": [[0, 0], [10, 30], [15, 55], [22, 80], [30, 100]]},
+        {"key": "operating_margin_latest", "label": "Operating margin (latest)", "weight": 15, "points": [[0, 0], [5, 25], [10, 50], [18, 75], [28, 100]]},
+        {"key": "operating_margin_trend", "label": "Operating margin vs prior 3-yr average (pp)", "weight": 15, "points": [[-6, 0], [-3, 30], [0, 60], [2, 80], [5, 100]]},
+        {"key": "net_margin_vs_peers", "label": "Net margin vs peer median (pp)", "weight": 15, "points": [[-10, 0], [-3, 30], [0, 50], [3, 70], [10, 100]]}
+      ],
+      "balance_sheet": [
+        {"key": "debt_to_equity", "label": "Debt-to-equity (÷ sector leverage tolerance)", "weight": 30, "points": [[0, 100], [0.3, 85], [0.6, 65], [1.0, 45], [2.0, 15], [3.0, 0]], "scaled_by": "leverage_tolerance"},
+        {"key": "net_debt_to_ebitda", "label": "Net debt / EBITDA (÷ sector leverage tolerance)", "weight": 25, "points": [[-1, 100], [0, 90], [1, 75], [2, 55], [3, 35], [4, 15], [5, 0]], "scaled_by": "leverage_tolerance"},
+        {"key": "interest_coverage", "label": "Interest coverage (EBIT / interest)", "weight": 25, "points": [[1, 0], [1.5, 15], [3, 45], [5, 70], [10, 90], [20, 100]]},
+        {"key": "current_ratio", "label": "Current ratio", "weight": 20, "points": [[0.6, 10], [1.0, 40], [1.5, 70], [2.0, 90], [3.0, 100]]}
+      ],
+      "cash_flow": [
+        {"key": "cash_conversion_3y", "label": "Cumulative CFO / net profit (3y)", "weight": 35, "points": [[0, 0], [0.5, 25], [0.8, 55], [1.0, 80], [1.2, 100]]},
+        {"key": "fcf_positive_share", "label": "Share of last 3 years with positive FCF", "weight": 25, "points": [[0, 0], [0.34, 35], [0.67, 65], [1.0, 100]]},
+        {"key": "fcf_margin_avg3", "label": "Average FCF margin (3y)", "weight": 25, "points": [[-5, 0], [0, 25], [5, 55], [10, 80], [15, 100]]},
+        {"key": "receivables_vs_sales_gap", "label": "Receivables CAGR − revenue CAGR (3y, pp)", "weight": 15, "points": [[-5, 100], [0, 85], [5, 60], [10, 30], [20, 0]]}
+      ],
+      "valuation": [
+        {"key": "upside_to_fair_mid", "label": "Upside to fair-value midpoint (%)", "weight": 35, "points": [[-50, 0], [-20, 25], [0, 50], [20, 75], [50, 100]]},
+        {"key": "pe_vs_peers", "label": "P/E ÷ peer median P/E", "weight": 20, "points": [[0.5, 90], [0.8, 70], [1.0, 50], [1.3, 30], [2.0, 5]]},
+        {"key": "pe_history_percentile", "label": "P/E percentile within own 5-yr history", "weight": 15, "points": [[0, 90], [50, 50], [100, 10]]},
+        {"key": "fcf_yield", "label": "FCF yield (%)", "weight": 15, "points": [[-2, 0], [0, 20], [2, 40], [4, 60], [7, 85], [10, 100]]},
+        {"key": "peg", "label": "PEG (P/E ÷ EPS CAGR)", "weight": 15, "points": [[0.5, 90], [1.0, 65], [1.5, 45], [2.5, 20], [4.0, 5]]}
+      ],
+      "governance": [
+        {"key": "dilution_3y", "label": "Share-count increase over 3 years (%)", "weight": 20, "points": [[0, 100], [5, 70], [15, 30], [30, 0]]},
+        {"key": "insider_holding", "label": "Insider/promoter holding (provider) %", "weight": 15, "points": [[0, 30], [20, 50], [40, 75], [55, 90], [75, 85]]},
+        {"key": "pledge_pct", "label": "Promoter pledge % (user-entered)", "weight": 25, "points": [[0, 100], [10, 70], [25, 40], [50, 10]]},
+        {"key": "auditor_clean", "label": "Auditor: no qualification/resignation (user-entered)", "weight": 25, "points": [[0, 0], [1, 100]]},
+        {"key": "litigation_rpt_clean", "label": "No material litigation / RPT concerns (user-entered)", "weight": 15, "points": [[0, 10], [0.5, 40], [1, 100]]}
+      ],
+      "industry": [
+        {"key": "mcap_rank_pct", "label": "Market-cap rank among peers (percentile)", "weight": 40, "points": [[0, 20], [50, 55], [100, 100]]},
+        {"key": "net_margin_vs_peers", "label": "Net margin vs peer median (pp)", "weight": 30, "points": [[-10, 0], [-3, 30], [0, 50], [3, 70], [10, 100]]},
+        {"key": "growth_vs_peers", "label": "Revenue growth vs peer median (pp)", "weight": 30, "points": [[-15, 0], [-5, 30], [0, 50], [5, 70], [15, 100]]}
+      ]
+    },
+    "financial": {
+      "growth": [
+        {"key": "nii_cagr", "label": "Net interest income CAGR (3y, else longest)", "weight": 35, "points": [[0, 10], [8, 40], [14, 70], [20, 90], [30, 100]]},
+        {"key": "loans_cagr", "label": "Loan book CAGR (3y, else longest)", "weight": 25, "points": [[0, 10], [8, 40], [14, 70], [20, 90], [30, 80]]},
+        {"key": "eps_cagr", "label": "EPS CAGR (3y, else longest)", "weight": 25, "points": [[-10, 0], [0, 20], [8, 50], [15, 75], [25, 100]]},
+        {"key": "net_income_decline_years", "label": "Years with falling profit", "weight": 15, "points": [[0, 100], [1, 60], [2, 30], [3, 0]]}
+      ],
+      "profitability": [
+        {"key": "roe_avg3", "label": "Average ROE (last 3 years)", "weight": 40, "points": [[0, 0], [8, 25], [12, 50], [16, 75], [20, 100]]},
+        {"key": "roa_avg3", "label": "Average ROA (last 3 years)", "weight": 35, "points": [[0, 0], [0.5, 20], [1.0, 50], [1.5, 75], [2.0, 100]]},
+        {"key": "nim_proxy", "label": "NII / average assets (NIM proxy)", "weight": 25, "points": [[1.5, 10], [2.5, 40], [3.5, 70], [4.5, 100]]}
+      ],
+      "balance_sheet": [
+        {"key": "equity_to_assets", "label": "Equity / total assets (crude capital proxy)", "weight": 100, "points": [[4, 0], [7, 40], [10, 70], [13, 100]]}
+      ],
+      "asset_quality": [
+        {"key": "gnpa", "label": "Gross NPA % (user-entered)", "weight": 35, "points": [[0.5, 100], [2, 70], [4, 35], [8, 0]]},
+        {"key": "nnpa", "label": "Net NPA % (user-entered)", "weight": 20, "points": [[0.2, 100], [0.8, 70], [2, 30], [4, 0]]},
+        {"key": "car", "label": "Capital adequacy ratio % (user-entered)", "weight": 30, "points": [[11.5, 0], [14, 50], [17, 85], [20, 100]]},
+        {"key": "pcr", "label": "Provision coverage ratio % (user-entered)", "weight": 15, "points": [[40, 0], [60, 45], [75, 80], [85, 100]]}
+      ],
+      "valuation": [
+        {"key": "upside_to_fair_mid", "label": "Upside to fair-value midpoint (%)", "weight": 30, "points": [[-50, 0], [-20, 25], [0, 50], [20, 75], [50, 100]]},
+        {"key": "pb_vs_justified", "label": "P/B ÷ justified P/B", "weight": 30, "points": [[0.5, 95], [0.8, 75], [1.0, 55], [1.3, 30], [2.0, 5]]},
+        {"key": "pb_vs_peers", "label": "P/B ÷ peer median P/B", "weight": 20, "points": [[0.5, 90], [0.8, 70], [1.0, 50], [1.3, 30], [2.0, 5]]},
+        {"key": "pe_vs_peers", "label": "P/E ÷ peer median P/E", "weight": 20, "points": [[0.5, 90], [0.8, 70], [1.0, 50], [1.3, 30], [2.0, 5]]}
+      ],
+      "governance": [
+        {"key": "dilution_3y", "label": "Share-count increase over 3 years (%)", "weight": 20, "points": [[0, 100], [5, 70], [15, 30], [30, 0]]},
+        {"key": "insider_holding", "label": "Insider/promoter holding (provider) %", "weight": 15, "points": [[0, 30], [20, 50], [40, 75], [55, 90], [75, 85]]},
+        {"key": "pledge_pct", "label": "Promoter pledge % (user-entered)", "weight": 25, "points": [[0, 100], [10, 70], [25, 40], [50, 10]]},
+        {"key": "auditor_clean", "label": "Auditor: no qualification/resignation (user-entered)", "weight": 25, "points": [[0, 0], [1, 100]]},
+        {"key": "litigation_rpt_clean", "label": "No material litigation / RPT concerns (user-entered)", "weight": 15, "points": [[0, 10], [0.5, 40], [1, 100]]}
+      ],
+      "industry": [
+        {"key": "mcap_rank_pct", "label": "Market-cap rank among peers (percentile)", "weight": 50, "points": [[0, 20], [50, 55], [100, 100]]},
+        {"key": "roe_vs_peers", "label": "ROE vs peer median (pp)", "weight": 50, "points": [[-8, 0], [-3, 30], [0, 50], [3, 70], [8, 100]]}
+      ]
+    }
+  },
+  "risk": {
+    "resilience_weights": {"standard": {"balance_sheet": 60, "cash_flow": 40}, "financial": {"balance_sheet": 50, "asset_quality": 50}},
+    "base_share": 0.7,
+    "flag_points": {"high": 10, "medium": 4, "low": 1},
+    "flag_points_cap": 30,
+    "flag_categories": ["balance", "cashflow", "quality", "profitability", "growth", "governance"],
+    "labels": [[25, "Low"], [45, "Moderate"], [65, "Elevated"], [101, "High"]]
+  },
+  "quality_labels": [[30, "Poor"], [45, "Weak"], [60, "Average"], [75, "Good"], [101, "Strong"]],
+  "valuation_score_labels": [[30, "Expensive"], [45, "Somewhat expensive"], [60, "Fair"], [75, "Attractive"], [101, "Very attractive"]]
+}

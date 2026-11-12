@@ -1,0 +1,30 @@
+# Secrets and personal data: never commit
+.env
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+analytivest-backup-*.json
+*.enc.json
+
+# Environments, builds, caches
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+test-results.xml
+*.log
+
+# Large media (the tutorial video is shared separately; its source scripts are tracked)
+media/*.mp4
+
+# Editor / OS / tooling
+.claude/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
