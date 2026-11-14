@@ -167,7 +167,7 @@ def build_inputs(bundle: dict[str, Any], metrics: dict[str, Any], val: dict[str,
     holders = bundle.get("holders") or {}
     promoter = n.get("promoter_holding_pct") if is_num(n.get("promoter_holding_pct")) else holders.get("insiders_pct")
     put("insider_holding", promoter, "user-entered promoter holding" if is_num(n.get("promoter_holding_pct"))
-        else "provider 'insiders' % (approximates promoter group)", "not reported", "%")
+        else "provider 'insiders' % (for Indian companies, approximates the promoter group)", "not reported", "%")
     put("pledge_pct", n.get("promoter_pledge_pct"), "user-entered", "not available from free data; enter it from the "
         "shareholding pattern on the exchange website", "%")
     if "auditor_qualification" in n or "auditor_resigned" in n:
@@ -244,18 +244,30 @@ def _weighted(cats: dict[str, dict[str, Any]], weights: dict[str, float]) -> tup
     return (acc / w_av if w_av else None), (w_av / w_all if w_all else 0.0)
 
 
+INDIA_ONLY_INPUTS = {"pledge_pct"}  # promoter pledging is an Indian (SEBI) disclosure
+
+
 def score_company(bundle: dict[str, Any], metrics: dict[str, Any], val: dict[str, Any], flags: list[dict[str, Any]],
-                  peers: list[dict[str, Any]], notes: Optional[dict[str, Any]], cfg: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+                  peers: list[dict[str, Any]], notes: Optional[dict[str, Any]], cfg: Optional[dict[str, Any]] = None,
+                  market: str = "IN") -> dict[str, Any]:
     cfg = cfg or load_config()
     model = metrics["model"]
     profile_name, profile_cfg = select_profile(cfg, bundle.get("profile") or {})
     inputs = build_inputs(bundle, metrics, val, peers, notes, profile_cfg)
     rules = cfg["categories"][model]
+    if market != "IN":  # inputs that only exist in Indian disclosures must not count as "missing" elsewhere
+        rules = {name: [r for r in rs if r["key"] not in INDIA_ONLY_INPUTS] for name, rs in rules.items()}
     cats = {name: score_category(r, inputs, cfg["min_category_completeness"]) for name, r in rules.items()}
     if model == "financial":
         cats["cash_flow"] = {"score": None, "raw_score": None, "completeness": 0.0, "sufficient": False, "items": [],
                              "not_applicable": True,
                              "note": "Not applicable to lenders: operating cash flow mostly reflects loan-book changes."}
+        if market != "IN":
+            cats["asset_quality"] = {
+                "score": None, "raw_score": None, "completeness": 0.0, "sufficient": False, "items": [],
+                "not_applicable": True,
+                "note": "Not assessed for non-Indian banks: the inputs (gross/net NPA, RBI capital adequacy, provision "
+                        "coverage) are Indian disclosures, and comparable US figures are not in the free data."}
 
     # Verdict 1: business quality
     bq, bq_cov = _weighted(cats, cfg["business_quality_weights"][model])

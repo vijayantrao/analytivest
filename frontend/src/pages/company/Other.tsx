@@ -46,14 +46,15 @@ export function Shareholding({ a }: { a: A }) {
   const tri = (k: string) => (n[k] === true ? 'yes' : n[k] === false ? 'no' : 'unknown') as 'yes' | 'no' | 'unknown'
   const [applied, setApplied] = useState(false)
   const fin = a.metrics.is_financial
+  const india = a.market?.code !== 'US'  // promoter, pledge, FII/DII and NPA/RBI fields are Indian disclosures
   return (
     <div className="space-y-4">
-      <AnnualReportPanel a={a} onApply={(facts) => { setN({ ...n, ...facts }); setApplied(true) }} />
+      {india && <AnnualReportPanel a={a} onApply={(facts) => { setN({ ...n, ...facts }); setApplied(true) }} />}
       {applied && <p role="status" className="rounded-lg bg-accent-soft px-3 py-2 text-[13px] text-accent-ink">Facts applied to the form below. Check them, then press <b>Save</b>.</p>}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Ownership (provider)" subtitle="Yahoo classifies holders as insiders and institutions. For Indian companies “insiders” approximates the promoter group.">
-          <KV label="Insiders / promoter group (approx.)">{pct(h.insiders_pct)}</KV>
-          <KV label="Institutions (FII + DII combined)">{pct(h.institutions_pct)}</KV>
+        <Card title="Ownership (provider)" subtitle={india ? 'Yahoo classifies holders as insiders and institutions. For Indian companies “insiders” approximates the promoter group.' : 'Yahoo classifies holders as insiders (officers, directors, large owners) and institutions.'}>
+          <KV label={india ? 'Insiders / promoter group (approx.)' : 'Insiders'}>{pct(h.insiders_pct)}</KV>
+          <KV label={india ? 'Institutions (FII + DII combined)' : 'Institutions'}>{pct(h.institutions_pct)}</KV>
           <KV label="Public & others (residual)">{isNum(h.insiders_pct) && isNum(h.institutions_pct) ? pct(100 - h.insiders_pct - h.institutions_pct) : '—'}</KV>
           {isNum(h.insiders_pct) && isNum(h.institutions_pct) && (
             <div className="mt-3">
@@ -69,22 +70,36 @@ export function Shareholding({ a }: { a: A }) {
               </div>
             </div>
           )}
-          <p className="mt-3 text-xs text-muted">
-            Quarterly shareholding history, the FII vs DII split, <Term k="promoter_pledge">promoter pledging</Term>, executive pay and related-party
-            transactions are not available from free, terms-compliant sources. Read them in the exchange filings (links on the News tab) and record them on the right.
-          </p>
+          {india ? (
+            <p className="mt-3 text-xs text-muted">
+              Quarterly shareholding history, the FII vs DII split, <Term k="promoter_pledge">promoter pledging</Term>, executive pay and related-party
+              transactions are not available from free, terms-compliant sources. Read them in the exchange filings (links on the News tab) and record them on the right.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-muted">
+              Insider transactions, executive pay and related-party transactions are in SEC filings (Form 4, the proxy statement and the 10-K),
+              which the free data does not include. Record what you find on the right.
+            </p>
+          )}
         </Card>
         <Card title="Governance facts you entered" subtitle="Stored locally, labelled “user-entered”. They feed the governance score and red flags."
           actions={<button onClick={() => save.mutate()} disabled={save.isPending}
             className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"><Save size={13} aria-hidden /> Save</button>}>
-          <div className="grid grid-cols-2 gap-3">
-            {numField('promoter_holding_pct', 'Promoter holding %')}
-            {numField('promoter_pledge_pct', 'Pledged % of promoter holding')}
-            {numField('fii_pct', 'FII/FPI %')}
-            {numField('dii_pct', 'DII %')}
-            {numField('contingent_liabilities_cr', 'Contingent liabilities (₹ Cr)')}
-          </div>
-          {fin && (
+          {india ? (
+            <div className="grid grid-cols-2 gap-3">
+              {numField('promoter_holding_pct', 'Promoter holding %')}
+              {numField('promoter_pledge_pct', 'Pledged % of promoter holding')}
+              {numField('fii_pct', 'FII/FPI %')}
+              {numField('dii_pct', 'DII %')}
+              {numField('contingent_liabilities_cr', 'Contingent liabilities (₹ Cr)')}
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Promoter holding, pledges and the FII/DII split are Indian disclosures, so they are not asked for US companies and do not affect the governance score. Record auditor, litigation and related-party facts below (from the 10-K and proxy statement).</p>
+          )}
+          {fin && !india && (
+            <p className="mt-3 rounded-lg border border-line p-3 text-xs text-muted">Bank asset quality (gross/net NPA, RBI capital adequacy, provision coverage) is an Indian disclosure. For US banks it is not assessed and does not count against data completeness.</p>
+          )}
+          {fin && india && (
             <div className="mt-3 rounded-lg border border-line p-3">
               <p className="mb-2 text-xs font-semibold text-ink">Bank / NBFC asset quality & capital <span className="font-normal text-muted">(from quarterly results or the annual report)</span></p>
               <div className="grid grid-cols-2 gap-3">
@@ -109,7 +124,7 @@ export function Shareholding({ a }: { a: A }) {
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <label className="col-span-2 block text-xs sm:col-span-1"><span className="text-ink-2">Source (filing / page)</span>
-              <input value={n.source ?? ''} maxLength={300} onChange={(e) => setN({ ...n, source: e.target.value })} placeholder="e.g. Shareholding pattern Q2 FY27, BSE"
+              <input value={n.source ?? ''} maxLength={300} onChange={(e) => setN({ ...n, source: e.target.value })} placeholder={india ? 'e.g. Shareholding pattern Q2 FY27, BSE' : 'e.g. 10-K 2025, Item 3 (legal proceedings)'}
                 className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent" /></label>
             <label className="col-span-2 block text-xs sm:col-span-1"><span className="text-ink-2">As of</span>
               <input type="date" value={n.as_of ?? ''} onChange={(e) => setN({ ...n, as_of: e.target.value })}
@@ -241,7 +256,8 @@ export function Risks({ a }: { a: A }) {
             {insufficient.map(([k, c]: any) => <li key={k}><b>{k.replace('_', ' ')}</b>: {c.note}</li>)}
             <li>Material litigation, contingent liabilities, auditor remarks and pledging unless you record them on the Shareholding tab.</li>
             <li>Industry structure, market share, customer/supplier concentration, regulatory and technology risks: qualitative, read the annual report’s risk section.</li>
-            {a.metrics.is_financial && a.scores.categories.asset_quality?.score == null && <li>Asset quality (GNPA/NNPA) and capital adequacy, until you enter them or read them from the annual report on the Management & shareholding tab.</li>}
+            {a.metrics.is_financial && a.market?.code !== 'US' && a.scores.categories.asset_quality?.score == null && <li>Asset quality (GNPA/NNPA) and capital adequacy, until you enter them or read them from the annual report on the Management & shareholding tab.</li>}
+            {a.metrics.is_financial && a.market?.code === 'US' && <li>Bank asset quality (non-performing loans, regulatory capital): not available from the free data for US banks.</li>}
           </ul>
         </Card>
       </div>

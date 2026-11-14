@@ -165,8 +165,8 @@ export const api = {
   alertsCount: () => request<{ unread: number }>('/api/alerts/count'),
   alertsRead: (ids?: number[]) => request<any>('/api/alerts/read', { method: 'POST', body: JSON.stringify({ ids }) }),
   alertsCheck: () => request<{ job_id: string }>('/api/alerts/check', { method: 'POST' }),
-  alertsSettings: (enabled: boolean, time: string) =>
-    request<any>('/api/alerts/settings', { method: 'PUT', body: JSON.stringify({ enabled, time }) }),
+  alertsSettings: (enabled: boolean, time: string, time_us: string | null) =>
+    request<any>('/api/alerts/settings', { method: 'PUT', body: JSON.stringify({ enabled, time, time_us }) }),
   job: (id: string) => request<any>(`/api/jobs/${encodeURIComponent(id)}`),
   screener: (market: Market = 'IN') => request<any>(`/api/screener?market=${market}`),
   scan: (size: number, include_peers: boolean, market: Market = 'IN') =>

@@ -22,7 +22,7 @@ export function Financials({ a }: { a: A }) {
   const notes = (st.notes || []).map((n: string[], i: number) => (n.length ? `${st.labels[i]}: ${n.join(' ')}` : null)).filter(Boolean)
   return (
     <div className="space-y-4">
-      <ImportPanel a={a} />
+      {a.market?.code !== 'US' && <ImportPanel a={a} />}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] text-ink-2">Figures as reported by the provider, in <b>{sc.unit}</b> (per-share values in {cur}; share counts in crore). Consolidated where the provider reports it.</p>
         <Segmented label="Frequency" value={freq} onChange={setFreq} options={[{ value: 'annual', label: 'Annual' }, { value: 'quarterly', label: 'Quarterly' }]} />
@@ -184,7 +184,9 @@ export function Debt({ a }: { a: A }) {
             <KV label="Loans / total assets"><MetricValue a={a} k="loans_to_assets" /></KV>
             <KV label="Loan growth (YoY)"><MetricValue a={a} k="loan_growth" /></KV>
             <KV label="Book value per share"><MetricValue a={a} k="book_value_per_share" /></KV>
-            {([['gnpa_pct', 'gnpa', 'Gross NPA'], ['nnpa_pct', 'gnpa', 'Net NPA'], ['car_pct', 'car', 'Capital adequacy'],
+            {a.market?.code === 'US' && <KV label="Asset quality and capital">
+              <span className="text-xs text-muted">Not assessed for US banks (NPA and RBI capital measures are Indian disclosures)</span></KV>}
+            {a.market?.code !== 'US' && ([['gnpa_pct', 'gnpa', 'Gross NPA'], ['nnpa_pct', 'gnpa', 'Net NPA'], ['car_pct', 'car', 'Capital adequacy'],
               ['pcr_pct', null, 'Provision coverage']] as const).map(([k, term, label]) => (
               <KV key={k} label={term ? <Term k={term}>{label}</Term> : label} hint={a.notes?.[k] != null ? `user-entered${a.notes?.bank_as_of ? `, ${a.notes.bank_as_of}` : ''}` : undefined}>
                 {a.notes?.[k] != null ? <span className="num">{Number(a.notes[k]).toFixed(2)}%</span>

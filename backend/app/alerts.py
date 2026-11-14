@@ -15,8 +15,10 @@ import time
 import uuid
 from datetime import datetime
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from . import db
+from .markets import market_for_symbol
 
 log = logging.getLogger("analytivest.alerts")
 _job_lock = threading.Lock()
@@ -91,15 +93,55 @@ def check_symbol(symbol: str) -> list[dict[str, Any]]:
     return alerts
 
 
-def tracked_symbols() -> list[str]:
+def tracked_symbols(market: Optional[str] = None) -> list[str]:
     syms = [w["symbol"] for w in db.watchlist_list()] + [h["symbol"] for h in db.holdings_list()]
+    if market:
+        syms = [s for s in syms if market_for_symbol(s).code == market]
     return sorted(set(syms))
 
 
-def run_checks(job_id: Optional[str] = None, symbols: Optional[list[str]] = None) -> str:
-    """Run checks for all tracked companies, recording progress in the jobs table."""
+# ---------------- schedule: one daily check per market, after that market closes ----------------
+DEFAULT_SETTINGS = {"enabled": True, "time": "18:30", "time_us": None}  # time: India (local); time_us None = auto
+US_CHECK_ET = (16, 30)  # 30 minutes after the 16:00 New York close
+
+
+def settings() -> dict[str, Any]:
+    return {**DEFAULT_SETTINGS, **(db.setting_get("alerts") or {})}
+
+
+def us_auto_time(now: Optional[datetime] = None) -> str:
+    """16:30 New York time expressed in this computer's local time for today's date (follows US daylight
+    saving: 03:00 IST in the northern winter, 02:00 IST in summer). Because that is early morning in India,
+    the US check runs once a day from then on and picks up the previous New York session."""
+    now = now if now is not None and now.tzinfo is not None else (now or datetime.now()).astimezone()
+    ny = ZoneInfo("America/New_York")
+    close = now.astimezone(ny).replace(hour=US_CHECK_ET[0], minute=US_CHECK_ET[1], second=0, microsecond=0)
+    return close.astimezone(now.tzinfo).strftime("%H:%M")
+
+
+def check_times(cfg: dict[str, Any], now: Optional[datetime] = None) -> dict[str, str]:
+    return {"IN": cfg.get("time") or DEFAULT_SETTINGS["time"], "US": cfg.get("time_us") or us_auto_time(now)}
+
+
+def due_markets(now: datetime, cfg: dict[str, Any], last_runs: dict[str, Optional[float]],
+                tracked: dict[str, list[str]]) -> list[str]:
+    """Markets whose daily check is due: past their check time today, not yet run today, something tracked."""
+    if not cfg.get("enabled", True):
+        return []
+    due = []
+    for market, hhmm in check_times(cfg, now).items():
+        hh, mm = (int(x) for x in hhmm.split(":"))
+        last = last_runs.get(market)
+        ran_today = last is not None and datetime.fromtimestamp(last).date() == now.date()
+        if tracked.get(market) and not ran_today and (now.hour, now.minute) >= (hh, mm):
+            due.append(market)
+    return due
+
+
+def run_checks(job_id: Optional[str] = None, symbols: Optional[list[str]] = None, market: Optional[str] = None) -> str:
+    """Run checks for tracked companies (all, or one market's), recording progress in the jobs table."""
     job_id = job_id or f"alerts-{uuid.uuid4().hex[:8]}"
-    symbols = symbols if symbols is not None else tracked_symbols()
+    symbols = symbols if symbols is not None else tracked_symbols(market)
     if not _job_lock.acquire(blocking=False):
         raise RuntimeError("A check is already running.")
     try:
@@ -115,7 +157,10 @@ def run_checks(job_id: Optional[str] = None, symbols: Optional[list[str]] = None
                 errors.append(f"{s}: {e}")
         msg = f"{len(symbols)} companies checked, {new} new alert(s)" + (f", {len(errors)} failed" if errors else "")
         db.job_put(job_id, "alerts", "done", len(symbols), len(symbols), msg, started, time.time())
-        db.setting_put("alerts_last_run", time.time())
+        now = time.time()
+        db.setting_put("alerts_last_run", now)
+        for m in ([market] if market else ["IN", "US"]):
+            db.setting_put(f"alerts_last_run_{m}", now)
         return job_id
     finally:
         _job_lock.release()
@@ -132,24 +177,25 @@ def _safe_run(job_id: str) -> None:
         db.job_put(job_id, "alerts", "error", 0, 0, str(e), time.time(), time.time())
 
 
+def last_runs() -> dict[str, Optional[float]]:
+    legacy = db.setting_get("alerts_last_run")  # before per-market runs, one timestamp covered both
+    return {m: db.setting_get(f"alerts_last_run_{m}", legacy) for m in ("IN", "US")}
+
+
 def scheduler_loop(stop: threading.Event) -> None:
-    """While the app runs: once a day after the configured time (default 18:30, after market close)."""
+    """While the app runs: each market is checked once a day after its own close: Indian stocks after the
+    configured time (default 18:30), US stocks after 16:30 New York time (converted to local time)."""
     while not stop.wait(60 * 15):
         try:
-            cfg = db.setting_get("alerts", {"enabled": True, "time": "18:30"})
-            if not cfg.get("enabled", True):
-                continue
-            now = datetime.now()
-            hh, mm = (int(x) for x in str(cfg.get("time", "18:30")).split(":"))
-            last = db.setting_get("alerts_last_run")
-            ran_today = last and datetime.fromtimestamp(last).date() == now.date()
-            if not ran_today and (now.hour, now.minute) >= (hh, mm) and tracked_symbols():
-                run_checks()
+            tracked = {m: tracked_symbols(m) for m in ("IN", "US")}
+            for market in due_markets(datetime.now(), settings(), last_runs(), tracked):
+                run_checks(market=market)
         except Exception as e:
             log.warning("alert scheduler: %s", e)
 
 
-if __name__ == "__main__":  # for Windows Task Scheduler / manual runs
+if __name__ == "__main__":  # for Windows Task Scheduler / manual runs: python -m app.alerts [IN|US]
+    import sys
     logging.basicConfig(level=logging.INFO)
-    jid = run_checks()
+    jid = run_checks(market=sys.argv[1].upper() if len(sys.argv) > 1 else None)
     print(db.job_get(jid)["message"])

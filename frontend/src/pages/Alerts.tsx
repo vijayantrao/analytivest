@@ -53,7 +53,7 @@ export default function Alerts() {
   const q = useQuery({ queryKey: ['alerts'], queryFn: api.alerts })
   const [jobId, setJobId] = useState<string | null>(null)
   const job = useJob(jobId)
-  const [cfg, setCfg] = useState<{ enabled: boolean; time: string } | null>(null)
+  const [cfg, setCfg] = useState<{ enabled: boolean; time: string; time_us: string | null } | null>(null)
   const [perm, setPerm] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported')
   useEffect(() => { if (q.data && !cfg) setCfg(q.data.settings) }, [q.data, cfg])
   useEffect(() => {
@@ -61,11 +61,12 @@ export default function Alerts() {
   }, [job.data?.status, qc])
   const check = useMutation({ mutationFn: api.alertsCheck, onSuccess: (d) => setJobId(d.job_id) })
   const read = useMutation({ mutationFn: (ids?: number[]) => api.alertsRead(ids), onSuccess: () => { qc.invalidateQueries({ queryKey: ['alerts'] }); qc.invalidateQueries({ queryKey: ['alerts-count'] }) } })
-  const saveCfg = useMutation({ mutationFn: () => api.alertsSettings(cfg!.enabled, cfg!.time), onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }) })
+  const saveCfg = useMutation({ mutationFn: () => api.alertsSettings(cfg!.enabled, cfg!.time, cfg!.time_us), onSuccess: () => qc.invalidateQueries({ queryKey: ['alerts'] }) })
 
   if (q.isLoading) return <Skeleton className="h-60" />
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />
   const d = q.data
+  const sch = d.schedule
   const running = job.data && ['queued', 'running'].includes(job.data.status)
   return (
     <div className="space-y-4">
@@ -107,12 +108,22 @@ export default function Alerts() {
           <Card title="Schedule">
             {cfg && (
               <div className="space-y-3 text-[13px]">
-                <label className="flex items-center gap-2"><input type="checkbox" checked={cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} /> Daily check while the app is running</label>
-                <label className="block text-xs"><span className="text-ink-2">Time (after market close)</span>
-                  <input type="time" value={cfg.time} onChange={(e) => setCfg({ ...cfg, time: e.target.value })} className="mt-1 block rounded-lg border border-line bg-surface px-2 py-1.5 text-sm" /></label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} /> Daily checks while the app is running</label>
+                <p className="text-xs text-muted">Each market is checked once a day after it closes, so alerts use that day's closing data.</p>
+                <div className="flex flex-wrap gap-4">
+                  <label className="block text-xs"><span className="text-ink-2">Indian stocks ({sch.tracked.IN} tracked)</span>
+                    <input type="time" value={cfg.time} onChange={(e) => setCfg({ ...cfg, time: e.target.value })} className="mt-1 block rounded-lg border border-line bg-surface px-2 py-1.5 text-sm" /></label>
+                  <label className="block text-xs"><span className="text-ink-2">US stocks ({sch.tracked.US} tracked)</span>
+                    <input type="time" value={cfg.time_us ?? sch.us_auto} onChange={(e) => setCfg({ ...cfg, time_us: e.target.value })} className="mt-1 block rounded-lg border border-line bg-surface px-2 py-1.5 text-sm" /></label>
+                </div>
+                <p className="text-xs text-muted">
+                  {cfg.time_us
+                    ? <>US time set by you. <button type="button" onClick={() => setCfg({ ...cfg, time_us: null })} className="text-accent underline">Use automatic ({sch.us_auto})</button></>
+                    : <>US time is automatic: 16:30 New York time ({sch.us_auto} on this computer), adjusted for US daylight saving.</>}
+                </p>
                 <button onClick={() => saveCfg.mutate()} className="rounded-lg border border-line px-3 py-1.5 text-xs">Save schedule</button>
                 {saveCfg.isSuccess && <span className="ml-2 text-xs text-pos">Saved</span>}
-                <p className="text-xs text-muted">Last check: {d.last_run ? `${dateTime(d.last_run)} (${ago(d.last_run)})` : 'never'}.</p>
+                <p className="text-xs text-muted">Last check: Indian stocks {sch.last_runs.IN ? `${dateTime(sch.last_runs.IN)} (${ago(sch.last_runs.IN)})` : 'never'} · US stocks {sch.last_runs.US ? `${dateTime(sch.last_runs.US)} (${ago(sch.last_runs.US)})` : 'never'}.</p>
                 <div className="border-t border-line pt-3">
                   <p className="mb-1 text-xs text-ink-2">Desktop notifications while Analytivest is open in a browser tab:</p>
                   {perm === 'granted' ? <p className="text-xs text-pos">Enabled</p> : perm === 'unsupported' ? <p className="text-xs text-muted">Not supported by this browser.</p> : (
@@ -128,7 +139,7 @@ export default function Alerts() {
           <Card title="Run checks without opening the app">
             <p className="text-xs text-ink-2">To check even when Analytivest isn't running, add a daily Windows Task Scheduler task that runs this in the <code>stockiq\backend</code> folder:</p>
             <code className="mt-1 block rounded bg-surface-2 px-2 py-1.5 text-xs">.venv\Scripts\python -m app.alerts</code>
-            <p className="mt-1 text-xs text-muted">Alerts it finds appear here the next time you open the app.</p>
+            <p className="mt-1 text-xs text-muted">That checks everything. To follow each market's close, use two tasks instead: <code>-m app.alerts IN</code> at {d.settings.time} and <code>-m app.alerts US</code> at {sch.times.US}. Alerts appear here the next time you open the app.</p>
           </Card>
         </div>
       </div>

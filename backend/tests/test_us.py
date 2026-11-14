@@ -93,3 +93,76 @@ def test_fx_rate_uses_cache_and_fails_cleanly(client):
     db.cache_put("fx:USDINR", "fx", {"pair": "USDINR", "rate": 94.0, "as_of": "2026-11-12", "source": "test"}, "yahoo")
     r = client.get("/api/fx?pair=USDINR").json()
     assert r["rate"] == 94.0 and r["served_from"] == "cache"
+
+
+# ---------------- per-market alert schedule ----------------
+from datetime import datetime  # noqa: E402
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from app import alerts  # noqa: E402
+from app.engine.scoring import load_config, score_company  # noqa: E402
+from tests.test_engine import _full  # noqa: E402
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def test_us_check_time_follows_new_york_daylight_saving():
+    assert alerts.us_auto_time(datetime(2026, 1, 15, 12, 0, tzinfo=IST)) == "03:00"  # EST: 16:30 = 03:00 IST
+    assert alerts.us_auto_time(datetime(2026, 7, 15, 12, 0, tzinfo=IST)) == "02:00"  # EDT: 16:30 = 02:00 IST
+
+
+def test_due_markets():
+    cfg = {"enabled": True, "time": "18:30", "time_us": "02:30"}
+    both = {"IN": ["TCS.NS"], "US": ["AAPL"]}
+    morning, evening = datetime(2026, 11, 14, 9, 0), datetime(2026, 11, 14, 19, 0)
+    none = {"IN": None, "US": None}
+    assert alerts.due_markets(morning, cfg, none, both) == ["US"]  # US closed overnight; India still open
+    assert alerts.due_markets(evening, cfg, none, both) == ["IN", "US"]
+    ran = {"IN": datetime(2026, 11, 14, 18, 45).timestamp(), "US": datetime(2026, 11, 14, 3, 0).timestamp()}
+    assert alerts.due_markets(evening, cfg, ran, both) == []  # each runs once a day
+    yesterday = {"IN": datetime(2026, 11, 13, 18, 45).timestamp(), "US": datetime(2026, 11, 13, 3, 0).timestamp()}
+    assert alerts.due_markets(evening, cfg, yesterday, both) == ["IN", "US"]
+    assert alerts.due_markets(evening, cfg, none, {"IN": ["TCS.NS"], "US": []}) == ["IN"]  # nothing US tracked
+    assert alerts.due_markets(evening, {**cfg, "enabled": False}, none, both) == []
+
+
+def test_tracked_symbols_split_by_market_and_settings_api(client):
+    client.delete("/api/portfolio")
+    client.post("/api/portfolio", json={"symbol": "DEMO-STEADY", "quantity": 1})
+    db.holding_put("AAPL", "Apple", 2, 150, "test")
+    try:
+        assert "AAPL" in alerts.tracked_symbols("US") and "AAPL" not in alerts.tracked_symbols("IN")
+        assert "DEMO-STEADY" in alerts.tracked_symbols("IN")
+        assert client.put("/api/alerts/settings", json={"enabled": True, "time": "18:30", "time_us": "25:00"}).status_code == 422
+        assert client.put("/api/alerts/settings", json={"enabled": True, "time": "18:30", "time_us": "02:15"}).status_code == 200
+        s = client.get("/api/alerts").json()["schedule"]
+        assert s["times"] == {"IN": "18:30", "US": "02:15"} and s["tracked"]["US"] >= 1
+        assert client.put("/api/alerts/settings", json={"enabled": True, "time": "18:30", "time_us": None}).status_code == 200
+        assert client.get("/api/alerts").json()["schedule"]["times"]["US"] == alerts.us_auto_time()
+    finally:
+        client.delete("/api/portfolio")
+
+
+def test_run_checks_records_last_run_per_market():
+    db.setting_put("alerts_last_run_IN", 1.0)
+    db.setting_put("alerts_last_run_US", 1.0)
+    alerts.run_checks(symbols=[], market="US")
+    assert db.setting_get("alerts_last_run_US") > 1.0 and db.setting_get("alerts_last_run_IN") == 1.0
+
+
+# ---------------- India-only scoring inputs ----------------
+def test_us_governance_ignores_indian_only_inputs():
+    b, m, val, flags, india = _full("DEMO-STEADY")
+    us = score_company(b, m, val, flags, [], None, load_config(), market="US")
+    keys = lambda s: {i["key"] for i in s["categories"]["governance"]["items"]}  # noqa: E731
+    assert "pledge_pct" in keys(india) and "pledge_pct" not in keys(us)
+    assert us["categories"]["governance"]["completeness"] > india["categories"]["governance"]["completeness"]
+    assert us["data_completeness"] >= india["data_completeness"]
+
+
+def test_us_bank_asset_quality_not_applicable():
+    b, m, val, flags, india = _full("DEMO-BANK")
+    us = score_company(b, m, val, flags, [], None, load_config(), market="US")
+    assert india["categories"]["asset_quality"].get("not_applicable") is not True
+    assert us["categories"]["asset_quality"]["not_applicable"] is True and "Indian" in us["categories"]["asset_quality"]["note"]
+    assert us["data_completeness"] > india["data_completeness"]  # no longer counted as missing

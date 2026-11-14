@@ -692,7 +692,8 @@ def portfolio_clear():
 # ---------------- Alerts ----------------
 class AlertSettingsIn(BaseModel):
     enabled: bool = True
-    time: str = Field("18:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    time: str = Field("18:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")  # Indian stocks, local time
+    time_us: Optional[str] = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")  # None = after the New York close
 
 
 class ReadIn(BaseModel):
@@ -702,7 +703,10 @@ class ReadIn(BaseModel):
 @app.get("/api/alerts")
 def alerts_list(unread_only: bool = False, limit: int = Query(100, ge=1, le=500)):
     return {"alerts": db.alerts_list(limit, unread_only), "unread": db.alerts_unread_count(),
-            "last_run": db.setting_get("alerts_last_run"), "settings": db.setting_get("alerts", {"enabled": True, "time": "18:30"}),
+            "last_run": db.setting_get("alerts_last_run"), "settings": alerts.settings(),
+            "schedule": {"times": alerts.check_times(alerts.settings()), "us_auto": alerts.us_auto_time(),
+                         "last_runs": alerts.last_runs(),
+                         "tracked": {m: len(alerts.tracked_symbols(m)) for m in ("IN", "US")}},
             "tracked": alerts.tracked_symbols(), "job": db.job_latest("alerts")}
 
 

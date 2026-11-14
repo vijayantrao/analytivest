@@ -52,7 +52,7 @@ No API keys are needed. Optional settings are documented in [`.env.example`](.en
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest            # 121 offline tests (formulas, scoring, valuation, IPO, imports, portfolio, alerts, security, backup, ML, US, API)
+.\.venv\Scripts\python -m pytest            # 131 offline tests (formulas, scoring, valuation, IPO, imports, portfolio, alerts, security, backup, ML, US, API)
 .\.venv\Scripts\python -m pytest --live     # + 4 integration tests against real Yahoo Finance data
 cd ..\frontend
 npm run build                               # type-checks (tsc) and builds the UI
@@ -188,8 +188,9 @@ a licensed data provider (Yahoo's terms are personal-use only), PostgreSQL and a
   verdict (strong/steady/mixed/soft/weak); severe declines feed the red flags (`engine/quarterly.py`).
 - **Portfolio** (`/portfolio`): import Zerodha/Groww/any CSV or Excel holdings; value, P&L, weights, sector allocation,
   weighted quality, and warnings for concentration, high risk, overvaluation and weak quarters.
-- **Alerts** (`/alerts` + header bell): daily check (default 18:30 while the app runs, or via Windows Task Scheduler with
-  `.venv\Scripts\python -m app.alerts`) for new/cleared red flags, verdict and valuation changes, 10-point score moves,
+- **Alerts** (`/alerts` + header bell): one daily check per market after it closes (Indian stocks at 18:30, US stocks
+  at 16:30 New York time converted to local time, following US daylight saving), while the app runs or via Windows Task
+  Scheduler with `.venv\Scripts\python -m app.alerts [IN|US]`, for new/cleared red flags, verdict and valuation changes, 10-point score moves,
   new quarterly results and 8%+ price moves; browser notifications while the app is open (`app/alerts.py`).
 - **Earnings-quality anomaly detector (machine learning)**: a scikit-learn Isolation Forest trained on the screener
   universe flags companies whose accounting signals (accruals, cash conversion, receivables vs sales, margins,
@@ -223,10 +224,12 @@ a licensed data provider (Yahoo's terms are personal-use only), PostgreSQL and a
 - **Not available from free sources:** shareholding history and FII/DII split, segment/geographic revenue, live IPO
   calendars, subscription and GMP. Pledges, auditor remarks, contingent liabilities and bank NPA/CAR come from documents
   you upload or figures you enter.
-- **US coverage:** company analysis, screener, ML check and portfolio work for US stocks. The IPO module and the
-  RHP/DRHP reader follow SEBI documents (not US S-1 filings); the annual-report reader, Screener.in import and bank
-  inputs (GNPA, RBI capital minimum) are India-specific. Portfolio P&L in rupees uses today's USD/INR rate for the
-  cost too, so it leaves out currency gains since purchase.
+- **US coverage:** company analysis, screener, ML check, portfolio and alerts work for US stocks. India-only inputs
+  are hidden for US companies and treated as *not applicable* rather than missing in scoring (promoter pledging; bank
+  NPA and RBI capital measures). Not available for US: the IPO module and RHP/DRHP reader (SEBI documents, not S-1),
+  the annual-report reader (Indian disclosures, not 10-K), the 10-year Screener.in import, and US bank asset quality.
+  Score thresholds are the same for both markets. Portfolio P&L in rupees uses today's USD/INR rate for the cost too,
+  so it leaves out currency gains since purchase.
 - **Not implemented:** SEC EDGAR provider for US (US data comes from Yahoo only), news beyond what Yahoo returns
   (often none for Indian stocks), server-generated PDFs.
 - **Speed:** a company's first load takes about 10–40 seconds (statements, prices and peer ratios); later loads come from the cache.

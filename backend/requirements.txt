@@ -14,6 +14,7 @@ pymupdf==1.28.2
 # Earnings-quality anomaly model
 scikit-learn==1.9.1
 python-docx==1.2.0
+tzdata==2026.5  # time-zone database on Windows (US alert schedule follows New York daylight saving)
 openpyxl==3.1.5
 rapidocr==3.10.0
 defusedxml==0.7.1  # hardens openpyxl's XML parsing (used automatically when installed)
