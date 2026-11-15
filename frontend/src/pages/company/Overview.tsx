@@ -109,7 +109,7 @@ function Verdicts({ a }: { a: A }) {
           <span className="text-lg font-semibold leading-tight">{vt}</span>
         </div>
         <p className="text-xs text-muted">
-          Attractiveness score {isNum(v.valuation.score) ? `${v.valuation.score.toFixed(0)}/100 (${v.valuation.score_label})` : 'n/a'} · {fv.n_methods} method(s)
+          Attractiveness score {isNum(v.valuation.score) ? `${v.valuation.score.toFixed(0)}/100 (${v.valuation.score_label})` : 'n/a'} · {fv.n_methods} method(s){isNum(fv.n_families) ? ` in ${fv.n_families} independent kind(s)` : ''}
           {fv.wide && ' · wide range'}
         </p>
         <FairValueBar fv={fv} priceNow={a.quote.price} currency={cur} />

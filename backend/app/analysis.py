@@ -102,15 +102,23 @@ def analyse(symbol: str, *, force: bool = False, dcf_overrides: Optional[dict[st
     val["comps"] = V.comps_valuation(metrics, peers, val["shares"], nd)
     val["ddm"] = V.ddm(bundle, metrics, market)
     val["justified_pb"] = V.justified_pb(metrics, market)
+    # One estimate per independent family of methods (see V.fair_value_range). The dividend model belongs to the
+    # cash-flow family with the DCF and shares its discount rate, so it is only used where the DCF cannot be.
     estimates = []
     if val["dcf"].get("applicable"):
-        estimates.append({"method": "DCF (base case)", "value_per_share": val["dcf"]["result"].get("value_per_share")})
+        estimates.append({"method": "DCF (base case)", "value_per_share": val["dcf"]["result"].get("value_per_share"),
+                          "family": "cash_flow"})
+    elif val["ddm"].get("applicable") and not val["ddm"].get("low_payout_warning"):
+        estimates.append({"method": "Dividend discount model", "value_per_share": val["ddm"]["value_per_share"],
+                          "family": "cash_flow"})
+    if val["justified_pb"].get("applicable") and metrics["is_financial"]:
+        estimates.append({"method": "Justified P/B", "value_per_share": val["justified_pb"]["value_per_share"],
+                          "family": "cash_flow"})
     for m in val["comps"]["methods"]:
         estimates.append(m)
-    if val["ddm"].get("applicable") and not val["ddm"].get("low_payout_warning"):
-        estimates.append({"method": "Dividend discount model", "value_per_share": val["ddm"]["value_per_share"]})
-    if val["justified_pb"].get("applicable") and metrics["is_financial"]:
-        estimates.append({"method": "Justified P/B", "value_per_share": val["justified_pb"]["value_per_share"]})
+    own = V.own_history_pe(val["history"], metrics)
+    if own:
+        estimates.append(own)
     val["estimates"] = estimates
     val["fair_value"] = V.fair_value_range(val["price"], estimates)
     major = [r["metric"] for r in val["reconciliation"] if r.get("major")]

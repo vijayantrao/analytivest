@@ -55,18 +55,37 @@ equity/assets. Asset quality (GNPA) and capital adequacy (CAR) are listed as una
 - **P/E (latest FY)** = market cap / FY net profit. **P/E (TTM)** from 4 consecutive quarters, else the provider's figure (labelled).
   **Forward P/E** only when ≥3 analysts contribute (labelled *estimate*).
 - **Historical P/E band:** weekly price ÷ EPS of the latest fiscal year published ≥60 days earlier (no look-ahead).
-- **DCF:** base FCF = average of the last 3 years' FCF (must be positive); stage-1 growth = 3-yr revenue CAGR clipped
-  to 2–18%; linear fade to terminal growth (5%) over 5 years; discount 12% (≈7% G-sec + equity risk premium).
-  Equity = EV − net debt − minority interest. A 5×5 sensitivity grid (discount × terminal growth) and growth
-  sensitivity are always shown. All assumptions are editable. Not applied to lenders or when FCF ≤ 0.
+- **DCF (free cash flow to the firm):** base = average FCF margin of the last 3 years × latest revenue (a plain
+  average of past cash flow lags a growing company and lets one odd year set the base; must be positive).
+  FCFF = CFO − capex in India (Ind AS lets interest paid sit under financing, and most companies put it there);
+  in the US, interest paid is inside CFO under GAAP, so after-tax interest is added back — otherwise the debt would be
+  counted twice (once in the cash flow, again when net debt is subtracted). Stage-1 growth = 3-yr revenue CAGR
+  clipped to 2–18%; linear fade to terminal growth (IN 5%, US 3%) over 5 years. Discount rate = **WACC** on
+  market-value weights: E/(D+E)·kₑ + D/(D+E)·k_d·(1 − t), with kₑ 12% IN / 9% US (10-year government yield + equity
+  risk premium) and pre-tax k_d 9% IN / 6% US; floored at terminal growth + 2%. Equity = EV − net debt − minority
+  interest. A 5×5 sensitivity grid (discount × terminal growth) and growth sensitivity are always shown. All
+  assumptions are editable. Not applied to lenders or when normalised FCF ≤ 0.
 - **Comparables:** peer median P/E × EPS; peer median EV/EBITDA × EBITDA − net debt; for lenders peer median P/B × BVPS.
   Requires ≥3 valid peers. Provider peer ratios are screened first: values outside plausibility bounds
   (e.g. EV/EBITDA > 150×) or more than 4× from the median of the others are excluded and shown as “excl.”.
-- **Dividend discount model:** D₀ × (1+g)/(kₑ − g); only with dividends in ≥3 of the last 4 years; excluded from the
-  range when payout < 30%.
+- **Dividend discount model:** D₀ × (1+g)/(kₑ − g); only with dividends in ≥3 of the last 4 years. Shown for
+  reference; it enters the range only when the DCF is not applicable and payout ≥ 30% (it values the same cash
+  flows with the same discount rate, so counting both would double-weight one view — and a single-stage DDM
+  understates almost every company that retains earnings to grow).
 - **Justified P/B:** (ROE − g)/(kₑ − g) × BVPS; used in the range for financial companies.
-- **Fair-value range:** IQR of method values when ≥4 methods, else min–max; needs ≥2 methods, otherwise
-  “Cannot reliably assess”. Label: below the range = *Potentially undervalued*, above = *Potentially overvalued*.
+- **Own-history P/E:** the company's own median weekly P/E over the last five years (same no-look-ahead band as
+  above, ≥104 weeks required) × latest EPS. A relative anchor: it assumes the market priced this company sensibly on
+  average, not that it was ever cheap. It is available in fast scans, where peer lookups are skipped.
+- **Fair-value range:** methods are grouped into independent *families* — cash-flow model (DCF, else DDM; justified
+  P/B for lenders), peer multiples, own valuation history. Each family is first reduced to its median, so three peer
+  multiples built from one peer set count as one view, not three. Range = min–max of the family values (IQR when ≥4);
+  needs ≥2 families, otherwise “Cannot reliably assess”. Label: below the range = *Potentially undervalued*, above =
+  *Potentially overvalued*.
+- **Why this changed (measured on the 400 scanned companies, offline, before → after):** India — cannot assess
+  138 → 48, overvalued 47 → 49, within range 14 → 83, undervalued 1 → 20. US — cannot assess 109 → 32, overvalued
+  74 → 79, within 17 → 61, undervalued 0 → 28. Before, 86% (IN) / 80% (US) of DCF values sat below the price and
+  the DDM sat below it for 99%, so the label could only lean one way. Median DCF value ÷ price is now 0.34 (IN) and
+  0.80 (US): Indian DCFs are still conservative at a 12% cost of equity, which is a stated assumption, not hidden.
 - **Reconciliation:** market cap, P/B, EV and EV/EBITDA are compared with the provider's own figures. Gaps >10% are
   flagged. Gaps >20% on like-for-like checks (market cap, P/B) cap confidence at Medium and add a caveat. Provider
   values that are implausible on their face are ignored.

@@ -258,28 +258,71 @@ def dcf(base_fcf: float, *, growth: float, years: int, fade_years: int, discount
             "terminal_share_pct": pv_tv / ev * 100 if ev else None, "flows": flows}
 
 
+def wacc(market_cap: Optional[float], debt: Optional[float], cost_of_equity: float, cost_of_debt: float,
+         tax_rate: float) -> dict[str, Any]:
+    """Weighted average cost of capital on market-value weights: E/(D+E)·kₑ + D/(D+E)·k_d·(1 − t).
+    Gross debt is used (cash is not netted), the usual convention for capital weights."""
+    d = max(debt or 0.0, 0.0)
+    if not market_cap or market_cap <= 0:
+        return {"value": cost_of_equity, "equity_weight": 1.0, "debt_weight": 0.0,
+                "note": "market value of equity unavailable, so the cost of equity is used"}
+    we = market_cap / (market_cap + d)
+    after_tax_kd = cost_of_debt * (1 - tax_rate / 100)
+    return {"value": we * cost_of_equity + (1 - we) * after_tax_kd, "equity_weight": we, "debt_weight": 1 - we,
+            "cost_of_equity": cost_of_equity, "after_tax_cost_of_debt": after_tax_kd}
+
+
+def _fcff_series(bundle: dict[str, Any], metrics: dict[str, Any], market) -> tuple[list[Optional[float]], list[Optional[float]], float]:
+    """Free cash flow to the firm per year, aligned with revenue, plus the tax rate used for the interest add-back."""
+    A = metrics["annual"]["series"]
+    fcf = [c["value"] for c in A.get("fcf", [])]
+    rev = [c["value"] for c in A.get("revenue", [])]
+    etr = _v(metrics["latest"].get("effective_tax_rate"))
+    t = etr if (etr is not None and 5 <= etr <= 45) else market.statutory_tax_rate
+    if market.interest_in_cfo:
+        interest = [_v(p["fields"].get("interest_expense")) for p in bundle.get("annual") or []]
+        if len(interest) == len(fcf):
+            fcf = [(f + (i or 0.0) * (1 - t / 100)) if f is not None else None for f, i in zip(fcf, interest)]
+    return fcf, rev, t
+
+
 def dcf_analysis(bundle: dict[str, Any], metrics: dict[str, Any], market, overrides: Optional[dict[str, Any]] = None,
                  shares: Optional[float] = None) -> dict[str, Any]:
+    """Free-cash-flow-to-the-firm DCF: FCFF discounted at the WACC gives enterprise value; net debt and minority
+    interest are then subtracted to reach equity. (Discounting firm cash flow at the cost of equity, or subtracting
+    debt from cash flow that is already after interest, would both misstate the value.)"""
     overrides = overrides or {}
+    interest_note = ("Free cash flow to the firm = CFO − capex + after-tax interest (interest paid is inside "
+                     "operating cash flow under US GAAP)." if market.interest_in_cfo else
+                     "Free cash flow to the firm = CFO − capex (Indian companies usually report interest paid under "
+                     "financing, so CFO is already before interest).")
     limitations = [
         "Highly sensitive to the discount rate and terminal growth; small changes move the result a lot.",
         "Uses historical free cash flow as the base; it does not know about future capex cycles or new businesses.",
-        "Free cash flow is defined here as CFO − capex (before interest in Indian reporting, so it approximates "
-        "free cash flow to the firm); net debt is then subtracted to reach equity value.",
+        interest_note + " Discounted at the WACC, then net debt is subtracted to reach equity value.",
     ]
     if metrics["is_financial"]:
         return {"applicable": False, "reason": "DCF on free cash flow is not meaningful for banks and other "
                 "lenders: lending is their operating activity, so CFO swings with loan growth. "
                 "Use P/B-based methods instead.", "limitations": limitations}
-    fcf_series = [c["value"] for c in metrics["annual"]["series"].get("fcf", [])]
-    recent = [x for x in fcf_series[-3:] if x is not None]
-    if not recent:
+    fcff, rev, tax = _fcff_series(bundle, metrics, market)
+    pairs = [(f, r) for f, r in zip(fcff[-3:], rev[-3:]) if f is not None]
+    if not pairs:
         return {"applicable": False, "reason": "free cash flow history not available", "limitations": limitations}
-    base_default = sum(recent) / len(recent)
-    base_method = f"average of last {len(recent)} years' FCF"
+    latest_rev = rev[-1] if rev else None
+    margins = [f / r for f, r in pairs if r]
+    if latest_rev and latest_rev > 0 and len(margins) == len(pairs):
+        # Normalised: the average FCF margin applied to the latest revenue. A plain average of past cash flows
+        # lags a growing company and lets one unusual year (a tax deposit, a capex spike) set the base.
+        avg_margin = sum(margins) / len(margins)
+        base_default = avg_margin * latest_rev
+        base_method = f"average FCF margin of the last {len(margins)} years ({avg_margin * 100:.1f}%) × latest revenue"
+    else:
+        base_default = sum(f for f, _ in pairs) / len(pairs)
+        base_method = f"average of the last {len(pairs)} years of free cash flow"
     if base_default <= 0:
-        return {"applicable": False, "reason": f"{base_method} is negative or zero, so an FCF-based DCF is not "
-                "meaningful. Valuation relies on other methods.", "limitations": limitations,
+        return {"applicable": False, "reason": f"Normalised free cash flow ({base_method}) is negative or zero, so an "
+                "FCF-based DCF is not meaningful. Valuation relies on other methods.", "limitations": limitations,
                 "base_fcf": base_default}
     g = metrics["growth"]
     rc = _v(g.get("revenue_cagr_3y")) if _v(g.get("revenue_cagr_3y")) is not None else _v(g.get("revenue_cagr_max"))
@@ -290,12 +333,16 @@ def dcf_analysis(bundle: dict[str, Any], metrics: dict[str, Any], market, overri
     shares = shares or _v((bundle.get("quote") or {}).get("shares_outstanding"))
     if nd is None or not shares:
         return {"applicable": False, "reason": "net debt or share count not available", "limitations": limitations}
+    price = _v((bundle.get("quote") or {}).get("price"))
+    w = wacc(price * shares if price else None, _v(L.get("total_debt")), market.default_cost_of_equity,
+             market.default_cost_of_debt, tax)
+    discount_default = round(max(w["value"], market.default_terminal_growth + 2.0), 1)
     a = {
         "base_fcf": float(overrides.get("base_fcf") or base_default),
         "growth": float(overrides.get("growth", growth_default)),
         "years": int(overrides.get("years", 5)),
         "fade_years": int(overrides.get("fade_years", 5)),
-        "discount": float(overrides.get("discount", market.default_cost_of_equity)),
+        "discount": float(overrides.get("discount", discount_default)),
         "terminal": float(overrides.get("terminal", market.default_terminal_growth)),
     }
     a["years"] = max(1, min(a["years"], 15))
@@ -314,18 +361,26 @@ def dcf_analysis(bundle: dict[str, Any], metrics: dict[str, Any], market, overri
     if base.get("terminal_share_pct") and base["terminal_share_pct"] > 75:
         limitations.append(f"Terminal value is {base['terminal_share_pct']:.0f}% of enterprise value, so the result "
                            "depends mostly on assumptions far in the future.")
+    if w.get("debt_weight"):
+        wacc_note = (f"default {discount_default}% = WACC: {w['equity_weight'] * 100:.0f}% equity at "
+                     f"{market.default_cost_of_equity}% ({market.cost_of_equity_basis}) + {w['debt_weight'] * 100:.0f}% "
+                     f"debt at {market.default_cost_of_debt}% pre-tax ({w['after_tax_cost_of_debt']:.1f}% after tax)")
+    else:
+        wacc_note = (f"default {discount_default}% = cost of equity ({market.cost_of_equity_basis}); "
+                     "no debt, so the WACC equals the cost of equity")
     return {
         "applicable": True, "assumptions": a,
         "defaults": {"base_fcf": base_default, "growth": growth_default, "years": 5, "fade_years": 5,
-                     "discount": market.default_cost_of_equity, "terminal": market.default_terminal_growth},
+                     "discount": discount_default, "terminal": market.default_terminal_growth},
         "assumption_notes": {
-            "base_fcf": base_method + " (CFO − capex)",
+            "base_fcf": base_method + ("; free cash flow to the firm (interest added back)" if market.interest_in_cfo
+                                       else "; CFO − capex"),
             "growth": "default = 3-yr revenue CAGR clipped to 2–18%",
-            "discount": f"default {market.default_cost_of_equity}% ≈ {market.cost_of_equity_basis}; "
-                        "for leveraged firms a WACC slightly below this may be appropriate",
+            "discount": wacc_note,
             "terminal": f"default {market.default_terminal_growth}% nominal long-run growth",
             "net_debt": "latest fiscal-year net debt plus minority interest is subtracted",
         },
+        "wacc": w,
         "result": base, "net_debt_used": net_claims, "shares_used": shares,
         "sensitivity": {"discount_rates": grid_r, "terminal_growths": grid_g, "values": grid},
         "growth_sensitivity": growth_sens,
@@ -379,16 +434,16 @@ def comps_valuation(metrics: dict[str, Any], peers: list[dict[str, Any]], shares
     pe_m, n = out["medians"]["pe"]["value"], out["medians"]["pe"]["n"]
     if pe_m and n >= 3 and eps and eps > 0:
         out["methods"].append({"method": "Peer median P/E × EPS", "value_per_share": pe_m * eps,
-                               "inputs": f"median P/E {pe_m:.1f}× ({n} peers) × EPS {eps:.2f}"})
+                               "inputs": f"median P/E {pe_m:.1f}× ({n} peers) × EPS {eps:.2f}", "family": "peers"})
     if not metrics["is_financial"]:
         ev_m, n = out["medians"]["ev_ebitda"]["value"], out["medians"]["ev_ebitda"]["n"]
         if ev_m and n >= 3 and ebitda and ebitda > 0 and shares and net_debt is not None:
             out["methods"].append({"method": "Peer median EV/EBITDA", "value_per_share": (ev_m * ebitda - net_debt) / shares,
-                                   "inputs": f"median EV/EBITDA {ev_m:.1f}× ({n} peers); less net debt"})
+                                   "inputs": f"median EV/EBITDA {ev_m:.1f}× ({n} peers); less net debt", "family": "peers"})
     pb_m, n = out["medians"]["pb"]["value"], out["medians"]["pb"]["n"]
     if metrics["is_financial"] and pb_m and n >= 3 and bvps and bvps > 0:
         out["methods"].append({"method": "Peer median P/B × BVPS", "value_per_share": pb_m * bvps,
-                               "inputs": f"median P/B {pb_m:.2f}× ({n} peers) × BVPS {bvps:.2f}"})
+                               "inputs": f"median P/B {pb_m:.2f}× ({n} peers) × BVPS {bvps:.2f}", "family": "peers"})
     out["limitations"] = ["Assumes peers are correctly valued and comparable in growth, risk and accounting.",
                           "Peer multiples are trailing (provider-reported) while this company's inputs are latest fiscal year."]
     return out
@@ -432,11 +487,40 @@ def justified_pb(metrics: dict[str, Any], market) -> dict[str, Any]:
             "limitations": ["Assumes recent average ROE is sustainable for the long run."]}
 
 
+MIN_PE_HISTORY_WEEKS = 104  # two years of weekly P/E before the company's own history is used as an anchor
+
+FAMILY_LABELS = {"cash_flow": "Cash-flow model", "peers": "Peer multiples", "history": "Own valuation history"}
+
+
+def own_history_pe(history: dict[str, Any], metrics: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Value at the company's own median P/E of the last five years × latest EPS. A relative anchor: it assumes
+    the market priced this company sensibly on average over five years, not that it was ever cheap."""
+    stats = (history or {}).get("pe_stats")
+    eps = _v(metrics["latest"].get("eps"))
+    if not stats or stats.get("n_weeks", 0) < MIN_PE_HISTORY_WEEKS or not eps or eps <= 0:
+        return None
+    return {"method": "Own 5-yr median P/E × EPS", "value_per_share": stats["median"] * eps, "family": "history",
+            "inputs": f"median P/E {stats['median']:.1f}× over {stats['n_weeks']} weeks "
+                      f"({stats['from']} → {stats['to']}) × EPS {eps:.2f}"}
+
+
 def fair_value_range(price: Optional[float], estimates: list[dict[str, Any]]) -> dict[str, Any]:
-    vals = [e["value_per_share"] for e in estimates if is_num(e.get("value_per_share")) and e["value_per_share"] > 0]
+    """Combine method estimates into a range. Methods of the same family (e.g. three peer multiples, which share
+    one set of peers) are first reduced to their median, so each independent view counts once; the range then
+    runs from the lowest to the highest family value (interquartile range when there are 4 or more)."""
+    fam: dict[str, list[float]] = {}
+    for k, e in enumerate(estimates):
+        v = e.get("value_per_share")
+        if is_num(v) and v > 0:
+            fam.setdefault(e.get("family") or f"method-{k}", []).append(v)
+    families = [{"family": f, "label": FAMILY_LABELS.get(f, f), "value": F.median(vs), "n_methods": len(vs)}
+                for f, vs in fam.items()]
+    vals = [f["value"] for f in families]
+    n_methods = sum(f["n_methods"] for f in families)
     if price is None or len(vals) < 2:
-        return {"label": "Cannot reliably assess", "low": None, "mid": None, "high": None, "n_methods": len(vals),
-                "reason": "fewer than two independent valuation methods were applicable" if price else "no price"}
+        return {"label": "Cannot reliably assess", "low": None, "mid": None, "high": None, "n_methods": n_methods,
+                "n_families": len(vals), "families": families,
+                "reason": "fewer than two independent kinds of valuation method were applicable" if price else "no price"}
     if len(vals) >= 4:
         low, high = F.percentile(vals, 25), F.percentile(vals, 75)
     else:
@@ -449,7 +533,8 @@ def fair_value_range(price: Optional[float], estimates: list[dict[str, Any]]) ->
         label = "Potentially overvalued"
     else:
         label = "Within estimated fair-value range"
-    return {"label": label, "low": low, "mid": mid, "high": high, "n_methods": len(vals),
+    return {"label": label, "low": low, "mid": mid, "high": high, "n_methods": n_methods, "n_families": len(vals),
+            "families": families,
             "upside_to_mid_pct": (mid / price - 1) * 100 if mid else None,
             "range_width_pct": width,
             "wide": width is not None and width > 80,

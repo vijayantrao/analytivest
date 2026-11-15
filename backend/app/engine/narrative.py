@@ -94,7 +94,7 @@ def build_narrative(name: str, metrics: dict[str, Any], val: dict[str, Any], sco
     q.append({"q": "Is the stock reasonably valued?",
               "a": f"{fv.get('label', 'Cannot reliably assess')}. P/E {_x(_v(m.get('pe')), 1)}, P/B {_x(_v(m.get('pb')), 1)}"
                    + ("" if fin else f", EV/EBITDA {_x(_v(m.get('ev_ebitda')), 1)}")
-                   + (f". Estimated range {money(fv['low'], currency, 0)}–{money(fv['high'], currency, 0)} from {fv['n_methods']} methods"
+                   + (f". Estimated range {money(fv['low'], currency, 0)}–{money(fv['high'], currency, 0)} from {fv.get('n_families', fv['n_methods'])} independent kinds of method"
                       f"{' (wide: methods disagree)' if fv.get('wide') else ''}." if fv.get("low") else ".")})
     hi = [f for f in flags if f["severity"] == "high"]
     q.append({"q": "What are the major risks and warning signs?",

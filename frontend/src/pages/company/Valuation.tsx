@@ -159,6 +159,8 @@ function Dcf({ a }: { a: A }) {
   )
 }
 
+const FAMILY_LABELS: Record<string, string> = { cash_flow: 'cash-flow model', peers: 'peer multiples', history: 'own history' }
+
 export default function Valuation({ a }: { a: A }) {
   const v = a.valuation
   const cur = a.quote.currency
@@ -181,14 +183,15 @@ export default function Valuation({ a }: { a: A }) {
                 {v.estimates.length === 0 && <tr><td colSpan={3} className="py-2 text-muted">No method was applicable with the available data.</td></tr>}
                 {v.estimates.map((e: any, i: number) => (
                   <tr key={i} className="border-b border-line/60">
-                    <td className="py-1.5 text-ink-2">{e.method}{e.inputs && <Tip content={e.inputs} />}</td>
+                    <td className="py-1.5 text-ink-2">{e.method}{e.inputs && <Tip content={e.inputs} />}
+                      {e.family && <span className="ml-1.5 text-[11px] text-muted">· {FAMILY_LABELS[e.family] ?? e.family}</span>}</td>
                     <td className="num py-1.5 text-right">{price(e.value_per_share, cur)}</td>
                     <td className="num py-1.5 text-right text-muted">{isNum(a.quote.price) ? pct((e.value_per_share / a.quote.price - 1) * 100, 0, true) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-[11px] text-muted">Range = interquartile range of the method values when there are 4 or more methods, otherwise min–max. Needs at least 2 methods.</p>
+            <p className="mt-2 text-[11px] text-muted">Methods of the same kind (e.g. the peer multiples, which share one set of peers) are first reduced to their median, so each independent view counts once. Range = lowest to highest of those views (interquartile range when there are 4 or more). Needs at least 2 kinds{isNum(fv.n_families) ? ` — ${fv.n_families} used here` : ''}.</p>
           </div>
         </div>
       </Card>

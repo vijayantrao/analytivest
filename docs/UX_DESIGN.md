@@ -82,7 +82,7 @@ Analytivest
 ```
 Multiples table (value · basis · period · source)  |  Historical P/E band chart
 Fair-value range: [DCF ▬▬] [Comps ▬▬] [DDM ▬] vs ● price
-DCF editor: WACC [12%] g1 [10%] years [5] terminal g [5%] base FCF [3y avg]
+DCF editor: discount = WACC [~11%] g1 [10%] years [5] terminal g [5%] base FCF [3y avg]
 Sensitivity grid (WACC × terminal growth) · assumptions · limitations
 ```
 

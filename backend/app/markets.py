@@ -19,6 +19,11 @@ class Market:
     preferred_exchange: str
     notes: tuple[str, ...] = field(default_factory=tuple)
     cost_of_equity_basis: str = ""  # where the default cost of equity comes from (shown beside the DCF)
+    default_cost_of_debt: float = 9.0  # % pre-tax, for the WACC; a starting point, editable via the discount rate
+    # Where interest paid sits in the cash-flow statement. Ind AS lets Indian companies show it under financing
+    # (most do), so CFO − capex is already free cash flow to the firm. US GAAP puts it in operating cash flow, so
+    # after-tax interest must be added back before the debt is subtracted, or the debt is counted twice.
+    interest_in_cfo: bool = False
 
 
 MARKETS: dict[str, Market] = {
@@ -36,6 +41,8 @@ MARKETS: dict[str, Market] = {
         preferred_exchange="NSE",
         notes=("Yahoo quotes for NSE/BSE are delayed, not real-time.",),
         cost_of_equity_basis="Indian 10-year government bond yield (~7%) + equity risk premium (~5%)",
+        default_cost_of_debt=9.0,  # typical rate on rated Indian corporate borrowing
+        interest_in_cfo=False,
     ),
     "US": Market(
         code="US", name="United States", currency="USD",
@@ -48,6 +55,8 @@ MARKETS: dict[str, Market] = {
         display_units="million",
         preferred_exchange="NASDAQ",
         cost_of_equity_basis="US 10-year Treasury yield (~4%) + equity risk premium (~5%)",
+        default_cost_of_debt=6.0,  # typical investment-grade corporate yield
+        interest_in_cfo=True,
     ),
 }
 

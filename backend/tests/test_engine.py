@@ -276,3 +276,44 @@ def test_discontinued_operations_gain_does_not_inflate_profit():
     # Small differences (rounding, minority items) leave reported profit untouched
     p2 = [_period("2026-03-31", "FY2026", net_income=100.0, net_income_continuing=97.0)]
     assert not prefer_continuing_operations(p2) and p2[0]["fields"]["net_income"] == 100.0
+
+
+# ---------------- valuation bias fixes ----------------
+def test_same_family_methods_count_once():
+    # Three peer multiples share one peer set: they must not outvote one DCF. Peer median 150 vs DCF 90.
+    est = [{"value_per_share": 90, "family": "cash_flow"},
+           {"value_per_share": 140, "family": "peers"}, {"value_per_share": 150, "family": "peers"},
+           {"value_per_share": 400, "family": "peers"}]
+    fv = V.fair_value_range(100, est)
+    assert fv["n_families"] == 2 and fv["n_methods"] == 4
+    assert (fv["low"], fv["high"]) == (90, 150)  # min–max of family medians, not IQR of 4 raw values
+    assert fv["label"] == "Within estimated fair-value range"
+    # One family alone is not two independent views, however many methods it has.
+    assert V.fair_value_range(100, est[1:])["label"] == "Cannot reliably assess"
+
+
+def test_wacc_blends_equity_and_after_tax_debt():
+    w = V.wacc(market_cap=800, debt=200, cost_of_equity=12.0, cost_of_debt=9.0, tax_rate=25.0)
+    assert abs(w["value"] - (0.8 * 12 + 0.2 * 9 * 0.75)) < 1e-9
+    assert V.wacc(None, 200, 12.0, 9.0, 25.0)["value"] == 12.0  # no market cap: fall back to cost of equity
+
+
+def test_own_history_pe_needs_two_years():
+    metrics = {"latest": {"eps": {"value": 10.0}}}
+    hist = {"pe_stats": {"median": 25.0, "n_weeks": 200, "from": "2021-01-01", "to": "2025-01-01"}}
+    out = V.own_history_pe(hist, metrics)
+    assert out["value_per_share"] == 250.0 and out["family"] == "history"
+    hist["pe_stats"]["n_weeks"] = 50
+    assert V.own_history_pe(hist, metrics) is None
+    assert V.own_history_pe({"pe_stats": {"median": 25.0, "n_weeks": 200}}, {"latest": {"eps": {"value": -1.0}}}) is None
+
+
+def test_us_interest_added_back_to_fcf_not_india():
+    from app.markets import MARKETS
+    metrics = {"annual": {"series": {"fcf": [{"value": 100.0}], "revenue": [{"value": 1000.0}]}},
+               "latest": {"effective_tax_rate": {"value": 20.0}}}
+    bundle = {"annual": [{"fields": {"interest_expense": {"value": 50.0}}}]}
+    us, _, t = V._fcff_series(bundle, metrics, MARKETS["US"])
+    assert t == 20.0 and abs(us[0] - 140.0) < 1e-9  # 100 + 50 × (1 − 20%)
+    india, _, _ = V._fcff_series(bundle, metrics, MARKETS["IN"])
+    assert india[0] == 100.0

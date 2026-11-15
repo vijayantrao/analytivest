@@ -165,7 +165,7 @@ a licensed data provider (Yahoo's terms are personal-use only), PostgreSQL and a
 - Roughly 45 metrics with guards for negative/zero denominators, missing periods, fiscal-year changes and base effects
 - Separate scoring model for banks/financials; sector profiles for leverage tolerance
 - Three verdicts, a composite score, data completeness, confidence and positive/negative factors
-- Valuation: multiples, historical P/E band, FY-end multiples, editable DCF with sensitivity, peer comparables (with outlier screening), DDM, justified P/B, fair-value range, reconciliation with provider figures, total shareholder return
+- Valuation: multiples, historical P/E band, FY-end multiples, editable FCFF DCF at the WACC with sensitivity, peer comparables (with outlier screening), DDM, justified P/B, own-history P/E, fair-value range built from independent method families, reconciliation with provider figures, total shareholder return
 - Automated red flags with evidence, severity, period, implication and rule
 - User-entered governance facts (pledge, auditor, litigation, related-party transactions) feeding scores
 - IPO module: issue structure, fresh vs OFS, dilution, implied multiples vs peers, three scenarios, five assessments, lock-in dates, GMP/subscription shown only as unofficial context
