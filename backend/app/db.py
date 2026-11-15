@@ -169,8 +169,57 @@ def cache_put(key: str, kind: str, payload: Any, provider: str) -> float:
 
 
 def cache_stats() -> dict[str, Any]:
-    rows = _query("SELECT kind, COUNT(*) n, MAX(fetched_at) last FROM cache GROUP BY kind")
-    return {r["kind"]: {"count": r["n"], "last_fetched_at": r["last"]} for r in rows}
+    rows = _query("SELECT kind, COUNT(*) n, MAX(fetched_at) last, SUM(LENGTH(payload_json)) bytes FROM cache "
+                  "GROUP BY kind")
+    return {r["kind"]: {"count": r["n"], "last_fetched_at": r["last"], "bytes": r["bytes"] or 0} for r in rows}
+
+
+# Symbols the user has chosen to keep around are never pruned: their cached data is what makes them open offline.
+_KEPT_SYMBOLS_SQL = ("SELECT symbol FROM watchlist UNION SELECT symbol FROM holdings UNION SELECT symbol FROM "
+                     "company_notes UNION SELECT symbol FROM saved_analysis UNION SELECT symbol FROM imports")
+
+
+def cache_prune(max_age_days: float = 30, max_bytes: int = 150_000_000, now: Optional[float] = None) -> dict[str, Any]:
+    """Delete cached provider data nobody needs any more, so the database does not grow without limit.
+
+    1. Anything not refreshed for ``max_age_days`` is removed (it would be refetched before use anyway, since every
+       cache entry is older than its freshness limit by then), except for kept symbols (watchlist, portfolio, notes,
+       saved analyses, imports).
+    2. If the cache is still above ``max_bytes``, the least recently fetched unkept companies are removed until it
+       fits. Screener results and the ML model use the stored scan summaries, not this cache, so they are unaffected.
+    """
+    now = now or time.time()
+    kept = {r["symbol"] for r in _query(_KEPT_SYMBOLS_SQL)}
+
+    def unkept(key: str) -> bool:
+        kind, _, rest = key.partition(":")
+        return not (kind in ("fund", "prices", "quote", "peers") and rest in kept)
+
+    removed = 0
+    with tx() as c:
+        old = [r["key"] for r in c.execute("SELECT key FROM cache WHERE fetched_at < ?",
+                                           (now - max_age_days * 86400,)).fetchall()]
+        doomed = [k for k in old if unkept(k)]
+        c.executemany("DELETE FROM cache WHERE key=?", [(k,) for k in doomed])
+        removed += len(doomed)
+        total = c.execute("SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM cache").fetchone()[0]
+        if total > max_bytes:
+            # Oldest companies first; a company's fundamentals and prices go together.
+            rows = c.execute("SELECT key, LENGTH(payload_json) n FROM cache WHERE kind IN ('fundamentals', 'prices') "
+                             "ORDER BY fetched_at").fetchall()
+            for r in rows:
+                if total <= max_bytes:
+                    break
+                if unkept(r["key"]):
+                    c.execute("DELETE FROM cache WHERE key=?", (r["key"],))
+                    total -= r["n"]
+                    removed += 1
+    out = {"removed": removed, "bytes_after": total, "kept_symbols": len(kept)}
+    if removed:
+        with _lock:
+            conn().execute("VACUUM")  # give the freed space back to the disk
+        log.info("Cache pruned: %d entries removed, %.0f MB left", removed, total / 1e6)
+    return out
 
 
 # ---------- watchlist ----------

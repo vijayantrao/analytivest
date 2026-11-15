@@ -110,6 +110,7 @@ export default function Company() {
   }
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} title={`Could not analyse ${sym}`} />
   const a = q.data
+  if (!a) return <PageSkeleton />
   const active = TABS.find((t) => t.k === tab) ? tab : 'overview'
   return (
     <div className="space-y-4">

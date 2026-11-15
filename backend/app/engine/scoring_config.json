@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "notes": "Starting assumptions, not universal truths. Edit thresholds/weights here; the Methodology page shows the live values. 'points' are [input, score] pairs scored by linear interpolation and clamped at the ends.",
   "composite_weights": {
     "standard": {"growth": 20, "profitability": 20, "balance_sheet": 15, "cash_flow": 15, "valuation": 15, "governance": 10, "industry": 5},
@@ -37,8 +37,7 @@
         {"key": "roe_avg3", "label": "Average ROE (last 3 years)", "weight": 30, "points": [[0, 0], [8, 30], [12, 55], [18, 80], [25, 100]]},
         {"key": "roce_avg3", "label": "Average ROCE (last 3 years)", "weight": 25, "points": [[0, 0], [10, 30], [15, 55], [22, 80], [30, 100]]},
         {"key": "operating_margin_latest", "label": "Operating margin (latest)", "weight": 15, "points": [[0, 0], [5, 25], [10, 50], [18, 75], [28, 100]]},
-        {"key": "operating_margin_trend", "label": "Operating margin vs prior 3-yr average (pp)", "weight": 15, "points": [[-6, 0], [-3, 30], [0, 60], [2, 80], [5, 100]]},
-        {"key": "net_margin_vs_peers", "label": "Net margin vs peer median (pp)", "weight": 15, "points": [[-10, 0], [-3, 30], [0, 50], [3, 70], [10, 100]]}
+        {"key": "operating_margin_trend", "label": "Operating margin vs prior 3-yr average (pp)", "weight": 15, "points": [[-6, 0], [-3, 30], [0, 60], [2, 80], [5, 100]]}
       ],
       "balance_sheet": [
         {"key": "debt_to_equity", "label": "Debt-to-equity (÷ sector leverage tolerance)", "weight": 30, "points": [[0, 100], [0.3, 85], [0.6, 65], [1.0, 45], [2.0, 15], [3.0, 0]], "scaled_by": "leverage_tolerance"},

@@ -1,0 +1,10 @@
+# Lint configuration (CI runs `ruff check .`). Pyflakes (F) catches undefined names, unused imports and variables;
+# pycodestyle (E, W) catches syntax-level style problems. Long lines (E501) are not enforced: the code uses
+# ~120-character lines and wraps by hand where it helps readability.
+line-length = 120
+target-version = "py314"
+extend-exclude = [".venv", "data"]
+
+[lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]

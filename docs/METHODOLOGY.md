@@ -33,7 +33,7 @@ Run on every read (`backend/app/normalize.py`), in this order:
 | Net / operating / EBITDA margin | X / Revenue × 100 | revenue must be > 0 |
 | ROE | Net profit / average equity × 100 | blank if average equity ≤ 0; closing equity used (and noted) if the prior year is missing |
 | ROCE | EBIT / average (Total assets − Current liabilities) × 100 | |
-| ROIC | EBIT × (1 − t) / average (Equity + Debt − Cash) × 100; t = effective rate if 5–45%, else 25.17% statutory | |
+| ROIC | EBIT × (1 − t) / average (Equity + Debt − Cash) × 100; t = effective rate if 5–45%, else 25.17% statutory | missing (with the reason) when debt or cash is not reported, never computed as if they were zero |
 | Debt-to-equity | Total borrowings (incl. leases) / Equity | blank if equity ≤ 0 |
 | Net debt | Total debt − (Cash + short-term investments) | negative = net cash |
 | Net debt / EBITDA | Net debt / EBITDA | blank if EBITDA ≤ 0 |
@@ -45,9 +45,29 @@ Run on every read (`backend/app/normalize.py`), in this order:
 | Payout ratio | Dividends paid / Net profit | |
 | TTM | Sum of the latest 4 quarters | only if the quarters are consecutive (80–100 days apart) |
 
-For banks, NBFCs and insurers, industrial ratios (margins, D/E, coverage, FCF, ROCE…) are marked
-**not meaningful** and replaced by NII growth, loan growth, ROA, an NII/average-assets NIM proxy and
-equity/assets. Asset quality (GNPA) and capital adequacy (CAR) are listed as unavailable, not estimated.
+**Growth across a short fiscal year.** When a company changes its year-end, one "year" may be 9 or 15 months. Growth
+is never measured from or to such a year (a 9-month year followed by a full year at the same monthly sales would show
++33%), and a CAGR that would start or end on one is shown as not meaningful, with the reason.
+
+**Which companies get the financial model.** Only balance-sheet businesses whose cash flow and debt describe their
+lending or insurance float, not their operations:
+
+| Kind | Who | How it is decided |
+|---|---|---|
+| Lender | Banks, mortgage lenders, financial conglomerates, broker-dealers ("capital markets"); credit-services and asset-management companies that lend | Industry; for credit services and asset management, the balance sheet: loans ≥ 20% of assets, or net interest income ≥ 20% of revenue, or (credit services) borrowings ≥ 50% of assets |
+| Insurer | Life, general and reinsurance companies (not insurance brokers) | Industry |
+| Standard model | Fund managers, exchanges, ratings and data firms, insurance brokers, payment networks (Visa, Mastercard) | Fee businesses: scored like any other company |
+
+On 400 scanned companies this moved 20 fee businesses (5 exchanges, 9 fund managers and holding companies, Visa,
+Mastercard, S&P Global, Moody's, Marsh) off the bank model, and gave 9 insurers their own treatment.
+
+For lenders and insurers, industrial ratios (margins, D/E, coverage, FCF, ROCE…) are marked **not meaningful**.
+Lenders are scored on NII growth, loan growth, ROA, an NII/average-assets NIM proxy and equity/assets; asset quality
+(GNPA) and capital adequacy (CAR) are listed as unavailable, not estimated. Insurers are scored on revenue (premium and
+investment income) growth, EPS growth, ROE and ROA; NPAs, CAR and cash flow do not apply to them, and for life insurers
+equity ÷ assets is not assessed either (policyholder funds sit on their balance sheet, so it is low by design) — their
+risk verdict is "insufficient evidence" unless red flags fire, because the solvency ratio that would decide it is not
+in the free data.
 
 ## 3. Valuation (`backend/app/engine/valuation.py`)
 
@@ -112,7 +132,13 @@ A missing input is excluded (never scored as zero). A category with completeness
 | Valuation | Label from the fair-value range; attractiveness score from upside to the range midpoint, P/E vs peers, P/E percentile in own history, FCF yield and PEG. |
 
 **Composite** (configurable; standard weights) = growth 20, profitability 20, balance sheet 15, cash flow 15,
-valuation 15, governance 10, industry 5.
+valuation 15, governance 10, industry 5. Each input counts in one category only (net margin vs peers sits under
+*industry*, not also under profitability); a test enforces this.
+
+**Governance** is scored the same way in both markets: from share-count dilution plus facts you enter (auditor
+opinion, litigation, related-party transactions, and in India promoter pledging). Promoter/insider holding and pledging
+are Indian disclosures and are not scored for US companies (dispersed ownership is normal there). Provider data alone is
+never enough for a governance score, in either market.
 
 **Sector profiles** scale leverage thresholds: *capital-intensive* industries (utilities, infrastructure, telecom,
 steel…) tolerate 1.5× the leverage; *asset-light* ones (IT services, software) 0.8×.
@@ -131,7 +157,7 @@ negative FCF, profit rising while CFO lags (3-yr cumulative CFO/PAT < 0.8 and < 
 > 3 pp vs the prior 3-yr average, leverage and coverage thresholds (by sector profile), current ratio < 1, receivables
 CAGR exceeding revenue CAGR by >10 pp, exceptional items >15% of PBT in 2 of 3 years, ROE falling two years running,
 share-count growth >5% in 3 years, sharp latest-year deterioration, valuation >1.75× peer P/E, and user-entered
-governance facts (pledge, auditor, litigation, related-party transactions). Lenders get lender-specific checks.
+governance facts (pledge, auditor, litigation, related-party transactions). Lenders get lender-specific checks (ROA < 0.6%, loan growth > 30%, equity < 6% of assets); insurers are exempt from those, since a life insurer's ROA and equity ratio are low by design. Every rule has a test that fires it and one that keeps it quiet (`tests/test_redflags.py`).
 Flags are signals for further reading, never findings of wrongdoing.
 
 ## 6. IPO analysis (`backend/app/engine/ipo.py`)

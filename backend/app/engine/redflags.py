@@ -136,7 +136,9 @@ def compute_flags(bundle: dict[str, Any], metrics: dict[str, Any], valuation: di
                                f"{len(un)} years (max {max(big):.0f}%).", span,
                                "Recurring 'one-offs' flatter reported profit; core earnings are lower than headline PAT.",
                                "Unusual items > 15% of PBT in ≥2 of last 3 years"))
-    else:
+    elif metrics.get("financial_kind", "lender") == "lender":
+        # Lender-only rules. Insurers are skipped: a life insurer's ROA and equity ÷ assets are low by design
+        # (policyholder funds sit on its balance sheet), so these thresholds would flag every one of them.
         roa = lv("roa")
         if is_num(roa) and roa < 0.6:
             flags.append(_flag("low_roa", "Low return on assets (lender)", "medium", "profitability",
@@ -155,6 +157,7 @@ def compute_flags(bundle: dict[str, Any], metrics: dict[str, Any], valuation: di
                                f"Equity is {eta:.1f}% of total assets.", labels[-1],
                                "A crude leverage indicator; regulatory capital adequacy (CAR) is the proper measure "
                                "and is not available from the free provider.", "Equity / assets < 6%"))
+    if fin:
         nb = notes or {}
         src = f"user-entered{', ' + nb['bank_as_of'] if nb.get('bank_as_of') else ''}"
         g, nn, car, pcr = (nb.get(k) for k in ("gnpa_pct", "nnpa_pct", "car_pct", "pcr_pct"))
@@ -195,7 +198,7 @@ def compute_flags(bundle: dict[str, Any], metrics: dict[str, Any], valuation: di
                                "fundraising, ESOPs, or issuing shares for a merger; check which applies.",
                                "Split-adjusted share count up > 5% over 3 years"))
 
-    rg_last = lv("revenue_growth") if not fin else lv("nii_growth")
+    rg_last = lv("nii_growth") if metrics.get("financial_kind") == "lender" else lv("revenue_growth")
     ng_last = lv("net_income_growth")
     if (is_num(rg_last) and rg_last < -15) or (is_num(ng_last) and ng_last < -30):
         flags.append(_flag("sudden_deterioration", "Sharp deterioration in the latest year",

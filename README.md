@@ -52,11 +52,17 @@ No API keys are needed. Optional settings are documented in [`.env.example`](.en
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest            # 141 offline tests (formulas, scoring, valuation, IPO, imports, portfolio, alerts, security, backup, ML, US, regressions, API)
+.\.venv\Scripts\python -m pytest            # 207 offline tests (formulas, scoring, valuation, every red-flag rule, Yahoo parsing, IPO, imports, portfolio, alerts, security, backup, cache, ML, US, regressions, API), 87% coverage
 .\.venv\Scripts\python -m pytest --live     # + 4 integration tests against real Yahoo Finance data
+.\.venv\Scripts\python -m ruff check .      # lint (pip install -r requirements-dev.txt)
 cd ..\frontend
+npm test                                    # 10 Vitest tests (formatting, API client, error boundary)
+npm run lint                                # oxlint
 npm run build                               # type-checks (tsc) and builds the UI
 ```
+
+CI (GitHub Actions) runs all of these on every push: backend tests on Windows and Linux, a lint job, and frontend
+tests plus build. The Yahoo adapter is tested offline against a fake `yfinance` module, so CI never needs the network.
 
 Offline tests use the fictional sample provider and a throwaway database. The end-to-end user journeys (search, company
 tabs, DCF editing, watchlist, IPO, compare, mobile layout, light/dark theme) were exercised in a browser during development.
@@ -92,11 +98,13 @@ stockiq/
 │   ├── run.py                starts uvicorn on 127.0.0.1:8000 (serves API + built frontend)
 │   ├── requirements.txt
 │   ├── app/
-│   │   ├── main.py           FastAPI routes, validation, rate limiting, SPA hosting
+│   │   ├── main.py           app setup: request guard, error mapping, routers, SPA hosting
+│   │   ├── routes/           API endpoints by area: company, ipos, portfolio, alerts, screener, backup, lists, core
+│   │   ├── schemas.py        response models for the main read endpoints (mirrored in frontend/src/lib/types.ts)
 │   │   ├── analysis.py       orchestration: data → metrics → valuation → flags → scores → narrative
 │   │   ├── normalize.py      FX conversion, split/bonus adjustment, continuing ops, validation
 │   │   ├── markets.py        market registry (IN, US); add markets here
-│   │   ├── db.py             SQLite: cache, watchlist, notes, saved analyses, IPOs, portfolio, alerts
+│   │   ├── db.py             SQLite: cache (pruned at start: 30 days / 150 MB), watchlist, notes, saved analyses, IPOs, portfolio, alerts
 │   │   ├── backup.py         backup / restore / weekly automatic backups
 │   │   ├── config.py, glossary.py
 │   │   ├── providers/        base.py (contract), yahoo.py, sample.py, registry.py (cache + fallback)
@@ -224,9 +232,11 @@ a licensed data provider (Yahoo's terms are personal-use only), PostgreSQL and a
 - **Not available from free sources:** shareholding history and FII/DII split, segment/geographic revenue, live IPO
   calendars, subscription and GMP. Pledges, auditor remarks, contingent liabilities and bank NPA/CAR come from documents
   you upload or figures you enter.
+- **Markets:** only NSE/BSE (`.NS`/`.BO`) and US-listed symbols. Others (e.g. `7203.T`, `VOD.L`) are rejected with a
+  message instead of being analysed with the wrong market's tax and discount-rate defaults.
 - **US coverage:** company analysis, screener, ML check, portfolio and alerts work for US stocks. India-only inputs
-  are hidden for US companies and treated as *not applicable* rather than missing in scoring (promoter pledging; bank
-  NPA and RBI capital measures). Not available for US: the IPO module and RHP/DRHP reader (SEBI documents, not S-1),
+  are hidden for US companies and treated as *not applicable* rather than missing in scoring (promoter holding and
+  pledging; bank NPA and RBI capital measures). Governance needs at least one fact you enter in both markets. Not available for US: the IPO module and RHP/DRHP reader (SEBI documents, not S-1),
   the annual-report reader (Indian disclosures, not 10-K), the 10-year Screener.in import, and US bank asset quality.
   Score thresholds are the same for both markets. Portfolio P&L in rupees uses today's USD/INR rate for the cost too,
   so it leaves out currency gains since purchase.

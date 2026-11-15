@@ -56,7 +56,9 @@ flowchart LR
 
 | Module | Responsibility | Depends on |
 |---|---|---|
-| `main.py` | HTTP routes, SPA hosting, error mapping, rate limiting | everything below |
+| `main.py` | App setup: request guard (host, origin, token, rate limit), error mapping, router mounting, SPA hosting, cache pruning at start | routes |
+| `routes/*.py` | The 56 API operations, one module per area (company, ipos, portfolio, alerts, screener, backup, lists, core) | everything below |
+| `schemas.py` | Pydantic response models for analysis, DCF, summary, compare and health; core fields strict, the rest passed through | – |
 | `markets.py` | Market registry (IN: NSE/BSE, US) — suffixes, currency, display units, statutory tax rate, default discount rate | – |
 | `providers/base.py` | `Provider` protocol + `ProviderError`; canonical `CompanyBundle` | `models.py` |
 | `providers/yahoo.py` | Yahoo adapter → canonical model (field mapping, NaN→missing, split detection) | yfinance |
@@ -214,8 +216,11 @@ minimum interval to stay polite.
 
 ## 10. Testing strategy
 
-- **Unit**: every formula (known examples, negative/zero/missing edge cases), scoring behaviour with missing data, split adjustment, DCF maths, IPO maths.
-- **Integration**: provider normaliser against recorded fixture frames; live Yahoo smoke test (opt-in, `pytest -m live`).
+- **Unit**: every formula (known examples, negative/zero/missing edge cases), scoring behaviour with missing data, split adjustment, DCF maths, IPO maths, every red-flag rule (fires past its threshold, quiet inside it), financial-model selection, cache pruning.
+- **Provider**: the Yahoo adapter offline against a fake `yfinance` module (statement parsing, signs, NaN handling, quotes, search filtering, peers); live Yahoo smoke test (opt-in, `pytest --live`).
+- **Response contracts**: the analysis, DCF, summary, compare and health endpoints validate against `schemas.py`; the models were checked against all 400 cached companies before being enforced.
+- **Frontend**: Vitest + Testing Library (formatting, API client token refresh and errors, error boundary).
+- **Lint**: ruff (pyflakes + pycodestyle) and oxlint in CI.
 - **API**: FastAPI TestClient against the sample provider (offline, deterministic).
 - **End-to-end**: scripted browser walkthrough of search → dashboard → tabs → IPO → compare (performed during validation).
 

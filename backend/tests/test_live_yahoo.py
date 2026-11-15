@@ -20,7 +20,7 @@ def test_yahoo_search_groups_nse_bse():
     from app.providers import registry
     r = registry.search("hdfc bank")
     hdfc = next(g for g in r["results"] if "HDFC Bank" in g["name"])
-    exch = {l["exchange"] for l in hdfc["listings"]}
+    exch = {x["exchange"] for x in hdfc["listings"]}
     assert "NSE" in exch and hdfc["primary_symbol"].endswith(".NS")
 
 

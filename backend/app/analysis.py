@@ -142,7 +142,7 @@ def analyse(symbol: str, *, force: bool = False, dcf_overrides: Optional[dict[st
     cfg = load_config()
     _, profile_cfg = select_profile(cfg, bundle.get("profile") or {})
     flags = compute_flags(bundle, metrics, val, notes, profile_cfg)
-    quarterly = quarterly_check(bundle, metrics["is_financial"])
+    quarterly = quarterly_check(bundle, metrics["is_financial"], lender=metrics.get("financial_kind") == "lender")
     flags += quarter_flags(quarterly)
     flags.sort(key=lambda f: {"high": 0, "medium": 1, "low": 2}[f["severity"]])
     scores = score_company(bundle, metrics, val, flags, peers, notes, cfg, market=market.code)
@@ -178,7 +178,7 @@ def analyse(symbol: str, *, force: bool = False, dcf_overrides: Optional[dict[st
         "notes": notes,
         "news": bundle.get("news") or [],
         "links": _links(symbol, bundle),
-        "dividends": {"per_fy": [{"period": l, "dps": d} for l, d in zip(metrics["annual"]["labels"], dps)],
+        "dividends": {"per_fy": [{"period": lab, "dps": d} for lab, d in zip(metrics["annual"]["labels"], dps)],
                       "history": divs[-40:], "splits": bundle.get("splits") or []},
         "returns": _returns(prices),
         "in_watchlist": symbol in watch,

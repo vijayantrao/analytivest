@@ -72,7 +72,7 @@ export default function Compare() {
         {syms.length < 5 && <div className="w-full sm:w-80"><SearchBox placeholder="Add a company…" onSelect={(s) => !syms.includes(s) && setSyms([...syms, s])} /></div>}
       </div>
       {syms.length === 0 ? <EmptyState title="Add companies to compare">Search above, or open a company’s Peers tab and choose “Open in Compare”.</EmptyState>
-        : q.isLoading ? <PageSkeleton /> : q.isError ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : (
+        : q.isLoading ? <PageSkeleton /> : q.isError ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : !q.data ? <PageSkeleton /> : (
           <>
             {q.data.errors?.length > 0 && <p className="text-sm text-warn">Could not load: {q.data.errors.map((e: any) => `${e.symbol} (${e.message})`).join('; ')}</p>}
             <Card>

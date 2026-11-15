@@ -79,14 +79,27 @@ def large_amount(value: float, currency: str | None) -> str:
     return f"{sym}{value / 1e9:,.1f} billion" if abs(value) >= 1e9 else f"{sym}{value / 1e6:,.0f} million"
 
 
-def market_for_symbol(symbol: str) -> Market:
+class UnsupportedMarket(ValueError):
+    """A symbol from an exchange the app has no market rules for (tax, cost of capital, units)."""
+
+
+def market_code_or_none(symbol: str) -> str | None:
     s = symbol.upper()
+    if s.startswith("DEMO"):
+        return "IN"  # offline sample companies are modelled as Indian
     if s.endswith(".NS") or s.endswith(".BO"):
-        return MARKETS["IN"]
-    if "." not in s or s.startswith("DEMO"):
-        # Plain tickers are treated as US; DEMO sample companies are modelled as Indian.
-        return MARKETS["IN"] if s.startswith("DEMO") else MARKETS["US"]
-    return MARKETS["US"]
+        return "IN"
+    if "." not in s:
+        return "US"  # plain tickers (and class shares written with a dash, e.g. BRK-B)
+    return None  # .T (Tokyo), .L (London), .HK, ... : no market rules, so not supported
+
+
+def market_for_symbol(symbol: str) -> Market:
+    code = market_code_or_none(symbol)
+    if code is None:
+        raise UnsupportedMarket(f"{symbol.upper()} is listed on an exchange this app does not support. Only NSE/BSE "
+                                "(.NS/.BO) and US-listed (NYSE/NASDAQ) symbols can be analysed.")
+    return MARKETS[code]
 
 
 def exchange_display(code: str | None) -> str | None:

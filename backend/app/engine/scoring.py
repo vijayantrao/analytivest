@@ -59,20 +59,24 @@ def _growth_pick(metrics: dict[str, Any], base: str) -> tuple[Optional[float], O
 def build_inputs(bundle: dict[str, Any], metrics: dict[str, Any], val: dict[str, Any], peers: list[dict[str, Any]],
                  notes: Optional[dict[str, Any]], profile_cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """All scoring inputs: key -> {value, display, basis} (value None = missing, with reason)."""
-    I: dict[str, dict[str, Any]] = {}
+    inputs: dict[str, dict[str, Any]] = {}
     labels = metrics["annual"]["labels"]
 
     def put(key, value, basis="", reason=None, unit=""):
-        I[key] = {"value": value if is_num(value) else None, "basis": basis, "unit": unit,
+        inputs[key] = {"value": value if is_num(value) else None, "basis": basis, "unit": unit,
                   "reason": reason if not is_num(value) else None}
 
     last = labels[-1] if labels else ""
     span3 = f"{labels[-3]}–{last}" if len(labels) >= 3 else (f"{labels[0]}–{last}" if labels else "")
 
-    v, p = _growth_pick(metrics, "revenue_cagr"); put("revenue_cagr", v, p or "", "CAGR not computable", "%")
-    v, p = _growth_pick(metrics, "eps_cagr"); put("eps_cagr", v, p or "", "EPS CAGR not computable (needs positive start/end EPS)", "%")
-    v, p = _growth_pick(metrics, "nii_cagr"); put("nii_cagr", v, p or "", "NII not reported", "%")
-    v, p = _growth_pick(metrics, "loans_cagr"); put("loans_cagr", v, p or "", "loan book not reported", "%")
+    v, p = _growth_pick(metrics, "revenue_cagr")
+    put("revenue_cagr", v, p or "", "CAGR not computable", "%")
+    v, p = _growth_pick(metrics, "eps_cagr")
+    put("eps_cagr", v, p or "", "EPS CAGR not computable (needs positive start/end EPS)", "%")
+    v, p = _growth_pick(metrics, "nii_cagr")
+    put("nii_cagr", v, p or "", "NII not reported", "%")
+    v, p = _growth_pick(metrics, "loans_cagr")
+    put("loans_cagr", v, p or "", "loan book not reported", "%")
     rc = metrics["revenue_consistency"]
     put("revenue_growth_stdev", rc.get("stdev"), f"{rc.get('n')} yearly growth rates", "needs ≥3 yearly growth rates", "pp")
     put("revenue_decline_years", rc.get("declines"), f"of {rc.get('n')} years", "needs ≥3 yearly growth rates", "years")
@@ -200,7 +204,7 @@ def build_inputs(bundle: dict[str, Any], metrics: dict[str, Any], val: dict[str,
     proe = F.median([p.get("roe") for p in peers if is_num(p.get("roe"))])
     put("roe_vs_peers", (roe - proe) if (roe is not None and proe is not None and len(peers) >= 3) else None,
         f"{roe:.1f}% vs median {proe:.1f}%" if (roe is not None and proe is not None) else "", "needs ≥3 peers", "pp")
-    return I
+    return inputs
 
 
 def _label(score: Optional[float], table: list[list[Any]]) -> Optional[str]:
@@ -244,7 +248,11 @@ def _weighted(cats: dict[str, dict[str, Any]], weights: dict[str, float]) -> tup
     return (acc / w_av if w_av else None), (w_av / w_all if w_all else 0.0)
 
 
-INDIA_ONLY_INPUTS = {"pledge_pct"}  # promoter pledging is an Indian (SEBI) disclosure
+# Inputs that only mean something in Indian disclosures. Pledging is a SEBI disclosure. Promoter holding is an Indian
+# concept: a founding family holding 50–75% is normal there, while US ownership is usually dispersed (Apple's
+# insiders hold ~2%), so scoring US insider holding on the Indian curve would penalise normal US companies. Without
+# these, governance needs at least one fact you enter (auditor, litigation) in both markets before it is scored.
+INDIA_ONLY_INPUTS = {"pledge_pct", "insider_holding"}
 
 
 def score_company(bundle: dict[str, Any], metrics: dict[str, Any], val: dict[str, Any], flags: list[dict[str, Any]],
@@ -258,11 +266,35 @@ def score_company(bundle: dict[str, Any], metrics: dict[str, Any], val: dict[str
     if market != "IN":  # inputs that only exist in Indian disclosures must not count as "missing" elsewhere
         rules = {name: [r for r in rs if r["key"] not in INDIA_ONLY_INPUTS] for name, rs in rules.items()}
     cats = {name: score_category(r, inputs, cfg["min_category_completeness"]) for name, r in rules.items()}
+    insurer = metrics.get("financial_kind") == "insurer"
+    if insurer:
+        # Insurers have no loan book or net interest income: grow on revenue (premiums + investment income) instead.
+        std_growth = {r["key"]: r for r in cfg["categories"]["standard"]["growth"]}
+        rules = dict(rules)
+        rules["growth"] = [std_growth["revenue_cagr"] if r["key"] == "nii_cagr" else r
+                           for r in rules["growth"] if r["key"] != "loans_cagr"]
+        rules["profitability"] = [r for r in rules["profitability"] if r["key"] != "nim_proxy"]
+        cats = {name: score_category(r, inputs, cfg["min_category_completeness"]) for name, r in rules.items()}
     if model == "financial":
         cats["cash_flow"] = {"score": None, "raw_score": None, "completeness": 0.0, "sufficient": False, "items": [],
                              "not_applicable": True,
-                             "note": "Not applicable to lenders: operating cash flow mostly reflects loan-book changes."}
-        if market != "IN":
+                             "note": "Not applicable to insurers: operating cash flow mixes premiums received with "
+                                     "investment of the float." if insurer else
+                                     "Not applicable to lenders: operating cash flow mostly reflects loan-book changes."}
+        if insurer:
+            cats["asset_quality"] = {
+                "score": None, "raw_score": None, "completeness": 0.0, "sufficient": False, "items": [],
+                "not_applicable": True,
+                "note": "Not applicable to insurers: NPAs, capital adequacy and provision coverage are lending "
+                        "measures. An insurer's solvency ratio is not in the free data."}
+            if "life" in ((bundle.get("profile") or {}).get("industry") or "").lower():
+                cats["balance_sheet"] = {
+                    "score": None, "raw_score": None, "completeness": 0.0, "sufficient": False, "items": [],
+                    "not_applicable": True,
+                    "note": "Not assessed for life insurers: most of their assets are held for policyholders "
+                            "(unit-linked and policy funds), so equity ÷ assets is low by design and says little about "
+                            "risk. The regulatory solvency ratio, which would, is not in the free data."}
+        elif market != "IN":
             cats["asset_quality"] = {
                 "score": None, "raw_score": None, "completeness": 0.0, "sufficient": False, "items": [],
                 "not_applicable": True,

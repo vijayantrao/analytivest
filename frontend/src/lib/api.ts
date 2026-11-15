@@ -1,4 +1,5 @@
-// Thin typed client for the FastAPI backend. Analysis payloads are large and evolve with the
+// Typed client for the FastAPI backend. Response types live in ./types.ts and mirror backend/app/schemas.py.
+// Analysis payloads are large and evolve with the
 // engine, so they are typed loosely (`any`) at the boundary and read defensively in components.
 
 export class ApiError extends Error {
@@ -97,7 +98,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-export type Analysis = any
+import type { Analysis, CompanySummary, CompareResponse, DcfResponse } from './types'
+export type { Analysis }
 export type IpoAnalysis = any
 
 export interface SearchGroup {
@@ -131,10 +133,10 @@ export const api = {
   prices: (symbol: string, range: string) =>
     request<any>(`/api/company/${encodeURIComponent(symbol)}/prices?range=${range}`),
   dcf: (symbol: string, body: Record<string, number>) =>
-    request<any>(`/api/company/${encodeURIComponent(symbol)}/dcf`, { method: 'POST', body: JSON.stringify(body) }),
+    request<DcfResponse>(`/api/company/${encodeURIComponent(symbol)}/dcf`, { method: 'POST', body: JSON.stringify(body) }),
   saveNotes: (symbol: string, body: any) =>
     request<any>(`/api/company/${encodeURIComponent(symbol)}/notes`, { method: 'PUT', body: JSON.stringify(body) }),
-  compare: (symbols: string[]) => request<any>(`/api/compare?symbols=${symbols.map(encodeURIComponent).join(',')}`),
+  compare: (symbols: string[]) => request<CompareResponse>(`/api/compare?symbols=${symbols.map(encodeURIComponent).join(',')}`),
   watchlist: (details = false) => request<any>(`/api/watchlist${details ? '?details=true' : ''}`),
   watchAdd: (symbol: string) => request<any>('/api/watchlist', { method: 'POST', body: JSON.stringify({ symbol }) }),
   watchRemove: (symbol: string) => request<any>(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
@@ -154,7 +156,7 @@ export const api = {
   sampleRhp: () => blob('/api/ipos/sample-rhp'),
   upload: (path: string, file: File | Blob, filename: string) => sendForm(path, file, filename),
   exportCsv: (symbol: string) => download(`/api/company/${encodeURIComponent(symbol)}/export.csv`, `${symbol}.csv`),
-  summary: (symbol: string) => request<any>(`/api/company/${encodeURIComponent(symbol)}/summary`),
+  summary: (symbol: string) => request<CompanySummary>(`/api/company/${encodeURIComponent(symbol)}/summary`),
   importDelete: (symbol: string) => request<any>(`/api/company/${encodeURIComponent(symbol)}/import`, { method: 'DELETE' }),
   portfolio: () => request<any>('/api/portfolio'),
   holdingAdd: (symbol: string, quantity: number, avg_cost?: number) =>

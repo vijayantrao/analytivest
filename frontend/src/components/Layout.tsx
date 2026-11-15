@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useThemeChoice, type ThemeChoice } from '../lib/theme'
 import { AlertBell } from '../pages/Alerts'
+import { ErrorBoundary } from './ErrorBoundary'
 import { SearchBox } from './SearchBox'
 import { Disclaimer, cx } from './ui'
 
@@ -70,7 +71,9 @@ export function Layout() {
         )}
       </header>
       <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-5">
-        <Outlet />
+        <ErrorBoundary resetKey={loc.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
       <footer className="border-t border-line">
         <div className="mx-auto max-w-7xl space-y-1 px-4 py-4">

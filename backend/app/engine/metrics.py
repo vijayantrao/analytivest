@@ -17,8 +17,17 @@ INDUSTRIAL_ONLY = ("gross_margin", "ebitda_margin", "operating_margin", "roce", 
                    "working_capital", "receivable_days", "inventory_days", "receivables_growth", "fcf",
                    "fcf_margin", "cash_conversion", "ebitda")
 
-FINANCIAL_INDUSTRY_KEYWORDS = ("bank", "credit services", "insurance", "capital markets", "asset management",
-                               "mortgage", "financial conglomerates", "financial data")
+# Which financial companies get the balance-sheet ("financial") model. Only lenders and insurers do: their
+# operating cash flow and debt ratios describe the loan book or the insurance float, not the business. Fee
+# businesses (fund managers, exchanges, ratings and data firms, insurance brokers, payment networks) are scored on
+# the standard model like any other company.
+LENDER_INDUSTRY_KEYWORDS = ("bank", "mortgage", "financial conglomerates", "capital markets")
+INSURER_EXCLUDE = ("insurance brokers",)
+# Industries that mix lenders and fee businesses: decided from the balance sheet.
+MIXED_INDUSTRY_KEYWORDS = ("credit services", "asset management")
+LENDER_MIN_LOAN_SHARE = 20.0  # net loans as % of total assets
+LENDER_MIN_NII_SHARE = 20.0  # net interest income as % of revenue
+LENDER_MIN_DEBT_SHARE = 50.0  # borrowings as % of total assets (credit services only)
 
 # key -> label, unit, formula, category, higher_is_better (None = context-dependent)
 METRIC_DEFS: dict[str, dict[str, Any]] = {
@@ -84,11 +93,39 @@ METRIC_DEFS: dict[str, dict[str, Any]] = {
 }
 
 
-def is_financial(profile: dict[str, Any]) -> bool:
+def _share(part: Any, whole: Any) -> Optional[float]:
+    return part / whole * 100 if is_num(part) and is_num(whole) and whole > 0 else None
+
+
+def financial_kind(profile: dict[str, Any], latest_fields: Optional[dict[str, Any]] = None) -> Optional[str]:
+    """'lender', 'insurer' or None (standard model). For credit services and asset management the industry name is
+    not enough (Visa and Mastercard are "credit services"; an NBFC can be filed under asset management), so the
+    balance sheet decides: a lender has loans of at least 20% of assets or net interest income of at least 20% of
+    revenue. A credit-services company that borrows at least half its assets is also a lender: Yahoo often reports no
+    loan book and a meaningless interest split for Indian NBFCs, but their borrowing gives them away (Tata Capital
+    78%, IRFC 84%, against 20-40% for Visa and Mastercard). With no balance-sheet data, credit services default to
+    lender and asset management to standard."""
     ind = (profile.get("industry") or "").lower()
-    sec = (profile.get("sector") or "").lower()
-    return sec == "financial services" and any(k in ind for k in FINANCIAL_INDUSTRY_KEYWORDS) or \
-        any(k in ind for k in ("bank", "insurance"))
+    if "insurance" in ind:
+        return None if any(k in ind for k in INSURER_EXCLUDE) else "insurer"
+    if any(k in ind for k in LENDER_INDUSTRY_KEYWORDS):
+        return "lender"
+    if any(k in ind for k in MIXED_INDUSTRY_KEYWORDS):
+        f = latest_fields or {}
+        loans = _share(f.get("net_loans"), f.get("total_assets"))
+        nii = _share(f.get("net_interest_income"), f.get("revenue"))
+        debt = _share(f.get("total_debt"), f.get("total_assets")) if "credit" in ind else None
+        if loans is None and nii is None and debt is None:
+            return "lender" if "credit" in ind else None
+        if ((loans or 0) >= LENDER_MIN_LOAN_SHARE or (nii or 0) >= LENDER_MIN_NII_SHARE
+                or (debt or 0) >= LENDER_MIN_DEBT_SHARE):
+            return "lender"
+        return None
+    return None
+
+
+def is_financial(profile: dict[str, Any], latest_fields: Optional[dict[str, Any]] = None) -> bool:
+    return financial_kind(profile, latest_fields) is not None
 
 
 def _c(calc: Calc) -> dict[str, Any]:
@@ -124,7 +161,9 @@ def compute_series(periods: list[dict[str, Any]], *, statutory_tax: float, quart
         if not quarterly:
             if i == 0:
                 return None
-            if periods[i].get("non_standard_length_days"):
+            # A short (or long) fiscal year is not comparable with a normal one in either direction: growth from a
+            # 9-month year to a 12-month year at the same monthly sales would show +33%.
+            if periods[i].get("non_standard_length_days") or periods[i - 1].get("non_standard_length_days"):
                 return None
             return i - 1
         target = date.fromisoformat(periods[i]["period_end"])
@@ -204,13 +243,21 @@ def compute_series(periods: list[dict[str, Any]], *, statutory_tax: float, quart
         # Effective tax: use reported rate if within a sane band, else statutory.
         t = etr.value if (etr.value is not None and 5 <= etr.value <= 45) else statutory_tax
         nopat = ebit * (1 - t / 100) if ebit is not None else None
-        ic = (eq + (debt or 0) - (cash_sti or 0)) if eq is not None else None
+        # Invested capital = equity + debt − cash. Missing debt or cash makes it missing, never zero: a company
+        # whose debt simply was not reported would otherwise look far more capital-efficient than it is.
+        ic = (eq + debt - cash_sti) if None not in (eq, debt, cash_sti) else None
         ic_prev = None
-        if i > 0 and f(i - 1, "equity") is not None:
-            c0 = f(i - 1, "cash")
-            ic_prev = f(i - 1, "equity") + (f(i - 1, "total_debt") or 0) - ((c0 or 0) + (f(i - 1, "short_term_investments") or 0))
-        ic_avg = F.average(ic, ic_prev)
-        put("roic", i, _c(F.pct(nopat, ic_avg.value, name="ROIC")))
+        if i > 0:
+            e0, d0, c0 = f(i - 1, "equity"), f(i - 1, "total_debt"), f(i - 1, "cash")
+            if None not in (e0, d0, c0):
+                ic_prev = e0 + d0 - (c0 + (f(i - 1, "short_term_investments") or 0.0))
+        if ic is None:
+            missing_parts = [n for n, v in (("equity", eq), ("total debt", debt), ("cash", cash_sti)) if v is None]
+            put("roic", i, {"value": None, "status": "missing",
+                            "reason": f"invested capital needs {', '.join(missing_parts)}, which the provider did not report"})
+        else:
+            ic_avg = F.average(ic, ic_prev)
+            put("roic", i, _c(F.pct(nopat, ic_avg.value, name="ROIC")))
 
         put("total_debt", i, _raw(debt))
         put("cash_and_sti", i, _raw(cash_sti))
@@ -270,6 +317,10 @@ def cagr_metric(periods: list[dict[str, Any]], field: str, years: int, *, eps: b
                 "reason": f"needs {years + 1} annual periods; {len(periods)} available from the provider",
                 "period": None}
     end_p, start_p = periods[-1], periods[-1 - years]
+    odd = [p["label"] for p in (start_p, end_p) if p.get("non_standard_length_days") and not eps]
+    if odd:
+        return {"value": None, "status": "not_meaningful", "period": None,
+                "reason": f"{' and '.join(odd)} is not a 12-month fiscal year, so a growth rate from it would be distorted"}
     get = (lambda p: p["fields"].get("eps_diluted", p["fields"].get("eps_basic"))) if eps else (lambda p: p["fields"].get(field))
     actual_years = _years_between(start_p["period_end"], end_p["period_end"])
     calc = F.cagr(get(start_p), get(end_p), round(actual_years, 2))
@@ -315,7 +366,8 @@ def consistency(values: list[Optional[float]]) -> dict[str, Any]:
 def compute_metrics(bundle: dict[str, Any], statutory_tax: float) -> dict[str, Any]:
     annual = bundle.get("annual") or []
     quarterly = bundle.get("quarterly") or []
-    fin = is_financial(bundle.get("profile") or {})
+    kind = financial_kind(bundle.get("profile") or {}, annual[-1]["fields"] if annual else None)
+    fin = kind is not None
     A = compute_series(annual, statutory_tax=statutory_tax)
     Q = compute_series(quarterly, statutory_tax=statutory_tax, quarterly=True)
     if fin:
@@ -323,7 +375,7 @@ def compute_metrics(bundle: dict[str, Any], statutory_tax: float) -> dict[str, A
             for k in INDUSTRIAL_ONLY:
                 if k in S:
                     S[k] = [{"value": None, "status": "not_meaningful",
-                             "reason": "not meaningful for banks/financial companies"} for _ in S[k]]
+                             "reason": "not meaningful for lenders and insurers"} for _ in S[k]]
 
     latest: dict[str, Any] = {}
     if annual:
@@ -337,7 +389,7 @@ def compute_metrics(bundle: dict[str, Any], statutory_tax: float) -> dict[str, A
         growth[f"revenue_cagr_{yrs}y"] = cagr_metric(annual, "revenue", yrs)
         growth[f"net_income_cagr_{yrs}y"] = cagr_metric(annual, "net_income", yrs)
         growth[f"eps_cagr_{yrs}y"] = cagr_metric(annual, "eps", yrs, eps=True)
-        if fin:
+        if kind == "lender":
             growth[f"nii_cagr_{yrs}y"] = cagr_metric(annual, "net_interest_income", yrs)
             growth[f"loans_cagr_{yrs}y"] = cagr_metric(annual, "net_loans", yrs)
     # Longest available span, so short histories still get a CAGR (clearly labelled with its period)
@@ -353,6 +405,7 @@ def compute_metrics(bundle: dict[str, Any], statutory_tax: float) -> dict[str, A
            "eps": ttm_from_quarters(quarterly, "eps_diluted")}
     return {
         "is_financial": fin,
+        "financial_kind": kind,
         "model": "financial" if fin else "standard",
         "annual": A,
         "quarterly": Q,

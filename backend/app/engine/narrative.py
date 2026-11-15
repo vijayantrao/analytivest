@@ -28,6 +28,7 @@ def build_narrative(name: str, metrics: dict[str, Any], val: dict[str, Any], sco
                     flags: list[dict[str, Any]], currency: str | None = None) -> dict[str, Any]:
     L, G = metrics["latest"], metrics["growth"]
     fin = metrics["is_financial"]
+    insurer = metrics.get("financial_kind") == "insurer"
     lbl = metrics["annual"]["labels"]
     last = lbl[-1] if lbl else "the latest year"
     V = scores["verdicts"]
@@ -49,7 +50,10 @@ def build_narrative(name: str, metrics: dict[str, Any], val: dict[str, Any], sco
                    + (f" ({bq['score']:.0f}/100)" if bq["score"] is not None else "")
                    + f" and financial risk is {V['financial_risk']['label'].lower()}"
                    + (f" ({V['financial_risk']['score']:.0f}/100, higher = riskier)." if V['financial_risk']['score'] is not None else ".")})
-    if fin:
+    if insurer:
+        q.append({"q": "Is its business growing consistently?",
+                  "a": f"Revenue (premiums and investment income) grew {_p(rc)} a year ({rp or 'period n/a'})."})
+    elif fin:
         nc, npd = cagr_pick("nii_cagr")
         q.append({"q": "Is its business growing consistently?",
                   "a": f"Net interest income grew {_p(nc)} a year ({npd or 'period n/a'}); loan growth in {last} was "
@@ -66,7 +70,13 @@ def build_narrative(name: str, metrics: dict[str, Any], val: dict[str, Any], sco
                    f"Net profit changed {_p(ni_g)} year on year; EPS compounded at {_p(ec)} ({ep or 'n/a'})."
                    + (" Profit grew faster than revenue, so margins expanded." if (is_num(ec) and is_num(rc) and ec > rc + 2) else
                       " Profit grew slower than revenue: margins compressed, or the share count rose." if (is_num(ec) and is_num(rc) and ec < rc - 2) else "")})
-    if fin:
+    if insurer:
+        q.append({"q": "Is its debt manageable?",
+                  "a": "For an insurer, most liabilities are reserves owed to policyholders, not borrowing, so "
+                       "debt ratios do not apply. The measure that matters, the regulatory solvency ratio, is not in "
+                       "the free data; check the latest annual report or public disclosures. "
+                       f"Equity was {_p(_v(L.get('equity_to_assets')))} of assets."})
+    elif fin:
         inp = scores.get("inputs", {})
         car, gnpa, nnpa = (_v(inp.get(k)) for k in ("car", "gnpa", "nnpa"))
         bank_bits = []

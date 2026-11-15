@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import copy
-from concurrent.futures import ThreadPoolExecutor
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
 from .. import config, db
@@ -51,6 +51,7 @@ def validate_symbol(symbol: str) -> str:
     s = (symbol or "").strip().upper()
     if not SYMBOL_RE.match(s):
         raise ValueError("Invalid symbol format")
+    market_for_symbol(s)  # raises UnsupportedMarket (a ValueError) for exchanges without market rules
     return s
 
 

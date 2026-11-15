@@ -26,7 +26,8 @@ def _margin(f: dict[str, Any], num_key: str) -> Optional[float]:
     return F.pct(num, rev).value if is_num(num) and is_num(rev) else None
 
 
-def quarterly_check(bundle: dict[str, Any], is_financial: bool, today: Optional[date] = None) -> dict[str, Any]:
+def quarterly_check(bundle: dict[str, Any], is_financial: bool, today: Optional[date] = None,
+                    lender: Optional[bool] = None) -> dict[str, Any]:
     qs = sorted(bundle.get("quarterly") or [], key=lambda p: p["period_end"])
     qs = [q for q in qs if q["fields"].get("revenue") is not None or q["fields"].get("net_income") is not None]
     if not qs:
@@ -37,7 +38,8 @@ def quarterly_check(bundle: dict[str, Any], is_financial: bool, today: Optional[
     prev = _find(qs[:-1], end, 80, 100)
     lf = latest["fields"]
     metrics = [("revenue", "Revenue")]
-    if is_financial:
+    lender = is_financial if lender is None else lender
+    if lender:
         metrics.append(("net_interest_income", "Net interest income"))
     else:
         metrics += [("ebitda", "EBITDA"), ("operating_income", "Operating profit")]

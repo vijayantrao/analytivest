@@ -256,8 +256,8 @@ export function Risks({ a }: { a: A }) {
             {insufficient.map(([k, c]: any) => <li key={k}><b>{k.replace('_', ' ')}</b>: {c.note}</li>)}
             <li>Material litigation, contingent liabilities, auditor remarks and pledging unless you record them on the Shareholding tab.</li>
             <li>Industry structure, market share, customer/supplier concentration, regulatory and technology risks: qualitative, read the annual report’s risk section.</li>
-            {a.metrics.is_financial && a.market?.code !== 'US' && a.scores.categories.asset_quality?.score == null && <li>Asset quality (GNPA/NNPA) and capital adequacy, until you enter them or read them from the annual report on the Management & shareholding tab.</li>}
-            {a.metrics.is_financial && a.market?.code === 'US' && <li>Bank asset quality (non-performing loans, regulatory capital): not available from the free data for US banks.</li>}
+            {a.metrics.financial_kind === 'lender' && a.market?.code !== 'US' && a.scores.categories.asset_quality?.score == null && <li>Asset quality (GNPA/NNPA) and capital adequacy, until you enter them or read them from the annual report on the Management & shareholding tab.</li>}
+            {a.metrics.financial_kind === 'lender' && a.market?.code === 'US' && <li>Bank asset quality (non-performing loans, regulatory capital): not available from the free data for US banks.</li>}
           </ul>
         </Card>
       </div>

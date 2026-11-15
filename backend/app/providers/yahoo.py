@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from .. import config
-from ..markets import MARKETS, exchange_display, market_for_symbol
+from ..markets import MARKETS, exchange_display, market_code_or_none, market_for_symbol
 from .base import ProviderError
 
 log = logging.getLogger("stockiq.yahoo")
@@ -183,8 +183,8 @@ class YahooProvider:
             if q.get("quoteType") != "EQUITY":
                 continue
             sym = q.get("symbol")
-            if not sym:
-                continue
+            if not sym or market_code_or_none(sym) is None:
+                continue  # listings on unsupported exchanges are not offered
             out.append({
                 "symbol": sym,
                 "name": q.get("longname") or q.get("shortname") or sym,
