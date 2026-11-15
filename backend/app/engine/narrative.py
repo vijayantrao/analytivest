@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from ..markets import money
 from .formulas import is_num
 
 
@@ -24,7 +25,7 @@ def _v(d: Any) -> Optional[float]:
 
 
 def build_narrative(name: str, metrics: dict[str, Any], val: dict[str, Any], scores: dict[str, Any],
-                    flags: list[dict[str, Any]]) -> dict[str, Any]:
+                    flags: list[dict[str, Any]], currency: str | None = None) -> dict[str, Any]:
     L, G = metrics["latest"], metrics["growth"]
     fin = metrics["is_financial"]
     lbl = metrics["annual"]["labels"]
@@ -93,7 +94,7 @@ def build_narrative(name: str, metrics: dict[str, Any], val: dict[str, Any], sco
     q.append({"q": "Is the stock reasonably valued?",
               "a": f"{fv.get('label', 'Cannot reliably assess')}. P/E {_x(_v(m.get('pe')), 1)}, P/B {_x(_v(m.get('pb')), 1)}"
                    + ("" if fin else f", EV/EBITDA {_x(_v(m.get('ev_ebitda')), 1)}")
-                   + (f". Estimated range ₹{fv['low']:,.0f}–₹{fv['high']:,.0f} from {fv['n_methods']} methods"
+                   + (f". Estimated range {money(fv['low'], currency, 0)}–{money(fv['high'], currency, 0)} from {fv['n_methods']} methods"
                       f"{' (wide: methods disagree)' if fv.get('wide') else ''}." if fv.get("low") else ".")})
     hi = [f for f in flags if f["severity"] == "high"]
     q.append({"q": "What are the major risks and warning signs?",
@@ -115,7 +116,7 @@ def build_narrative(name: str, metrics: dict[str, Any], val: dict[str, Any], sco
     price = _v(m.get("price"))
     cond = []
     if fv.get("low") and price:
-        cond.append(f"a price nearer the low end of the estimated range (≈₹{fv['low']:,.0f}, "
+        cond.append(f"a price nearer the low end of the estimated range (≈{money(fv['low'], currency, 0)}, "
                     f"{(fv['low'] / price - 1) * 100:+.0f}% from today)")
     if not fin and is_num(_v(L.get("debt_to_equity"))) and _v(L.get("debt_to_equity")) > 1:
         cond.append("debt reduction to below 1× equity")

@@ -18,6 +18,7 @@ class Market:
     display_units: str  # "crore" | "million"
     preferred_exchange: str
     notes: tuple[str, ...] = field(default_factory=tuple)
+    cost_of_equity_basis: str = ""  # where the default cost of equity comes from (shown beside the DCF)
 
 
 MARKETS: dict[str, Market] = {
@@ -34,6 +35,7 @@ MARKETS: dict[str, Market] = {
         display_units="crore",
         preferred_exchange="NSE",
         notes=("Yahoo quotes for NSE/BSE are delayed, not real-time.",),
+        cost_of_equity_basis="Indian 10-year government bond yield (~7%) + equity risk premium (~5%)",
     ),
     "US": Market(
         code="US", name="United States", currency="USD",
@@ -45,8 +47,27 @@ MARKETS: dict[str, Market] = {
         screener_region="us",
         display_units="million",
         preferred_exchange="NASDAQ",
+        cost_of_equity_basis="US 10-year Treasury yield (~4%) + equity risk premium (~5%)",
     ),
 }
+
+CURRENCY_SYMBOLS = {"INR": "₹", "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
+
+
+def money(value: float, currency: str | None, decimals: int = 2) -> str:
+    """A per-share or price amount in its own currency: ₹1,234.50, $356.27, or 'CHF 12.00'."""
+    cur = (currency or "INR").upper()
+    sym = CURRENCY_SYMBOLS.get(cur)
+    return f"{sym}{value:,.{decimals}f}" if sym else f"{cur} {value:,.{decimals}f}"
+
+
+def large_amount(value: float, currency: str | None) -> str:
+    """A statement-sized amount in the units readers of that market expect: ₹ crore, else million/billion."""
+    cur = (currency or "INR").upper()
+    if cur == "INR":
+        return f"₹{value / 1e7:,.0f} Cr"
+    sym = CURRENCY_SYMBOLS.get(cur, cur + " ")
+    return f"{sym}{value / 1e9:,.1f} billion" if abs(value) >= 1e9 else f"{sym}{value / 1e6:,.0f} million"
 
 
 def market_for_symbol(symbol: str) -> Market:

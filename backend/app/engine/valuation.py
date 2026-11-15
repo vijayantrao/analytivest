@@ -321,7 +321,7 @@ def dcf_analysis(bundle: dict[str, Any], metrics: dict[str, Any], market, overri
         "assumption_notes": {
             "base_fcf": base_method + " (CFO − capex)",
             "growth": "default = 3-yr revenue CAGR clipped to 2–18%",
-            "discount": f"default {market.default_cost_of_equity}% ≈ Indian risk-free rate (~7%) + equity risk premium; "
+            "discount": f"default {market.default_cost_of_equity}% ≈ {market.cost_of_equity_basis}; "
                         "for leveraged firms a WACC slightly below this may be appropriate",
             "terminal": f"default {market.default_terminal_growth}% nominal long-run growth",
             "net_debt": "latest fiscal-year net debt plus minority interest is subtracted",

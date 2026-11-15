@@ -71,7 +71,7 @@ def build_sample_rhp() -> bytes:
         "Our Company is a manufacturer of precision-machined components for passenger-vehicle and two-wheeler OEMs, "
         "operating four plants. The aggregate pre-Offer shareholding of our Promoters and Promoter Group is 88.00% of "
         "the pre-Offer paid-up Equity Share capital. The post-Offer shareholding of our Promoters and Promoter Group "
-        f"will be 64.00% of the post-Offer paid-up Equity Share capital. As of June 30, 2026, our contingent liabilities, "
+        f"will be 68.88% of the post-Offer paid-up Equity Share capital. As of June 30, 2026, our contingent liabilities, "
         f"as per the Restated Financial Information, aggregated to {R} 450.00 million."))
 
     # 4. Risk factors

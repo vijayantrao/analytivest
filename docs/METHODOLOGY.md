@@ -122,6 +122,6 @@ band; P/E on post-issue shares (comparable basis) and pre-issue shares (as some 
 net worth + fresh issue; EV assumes proceeds are held as cash. Scenarios: next-year PAT × P/E ÷ post-issue shares, with
 (conservative) half of historical PAT growth and peer 25th-percentile P/E less 15%, (base) 80% of growth and peer median
 less 5%, (optimistic) full growth and the peer 75th percentile. Five assessments are kept separate; subscription and GMP
-only ever raise *risk*, never attractiveness. Lock-in dates follow SEBI ICDR periods (anchor 30/90 days, pre-IPO holders
+are shown as context only and enter no score, and neither does the number of risk factors typed in. Lock-in dates follow SEBI ICDR periods (anchor 30/90 days, pre-IPO holders
 6 months, promoters' minimum contribution 18 months) counted from an estimated allotment date. Confirm them against the
 offer document.

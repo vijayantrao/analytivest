@@ -304,6 +304,29 @@ def holdings_clear() -> None:
         c.execute("DELETE FROM holdings")
 
 
+def holdings_replace(rows: list[tuple[str, str | None, float, float | None, str]]) -> None:
+    """Swap the whole portfolio for `rows` (symbol, name, quantity, avg_cost, source) in one transaction,
+    so a failure part-way leaves the previous holdings untouched."""
+    now = time.time()
+    with tx() as c:
+        c.execute("DELETE FROM holdings")
+        c.executemany("INSERT OR REPLACE INTO holdings(symbol, name, quantity, avg_cost, source, updated_at) "
+                      "VALUES (?,?,?,?,?,?)", [(*r, now) for r in rows])
+
+
+def jobs_fail_unfinished(kind: str, older_than_seconds: float = 0.0) -> int:
+    """Mark jobs of `kind` still 'queued' or 'running' as failed. Jobs run in threads of this process, so after
+    a restart any such row belongs to a process that no longer exists and would otherwise block new jobs."""
+    now = time.time()
+    with tx() as c:
+        cur = c.execute(
+            "UPDATE jobs SET status='error', finished_at=?, message='Interrupted: the app was closed before this "
+            "finished (' || progress || ' of ' || total || ' done). Start it again.' "
+            "WHERE kind=? AND status IN ('queued','running') AND COALESCE(started_at, 0) <= ?",
+            (now, kind, now - older_than_seconds))
+        return cur.rowcount
+
+
 # ---------- snapshots & alerts ----------
 def snapshot_last(symbol: str) -> Optional[dict[str, Any]]:
     rows = _query("SELECT * FROM snapshots WHERE symbol=? ORDER BY taken_at DESC LIMIT 1", (symbol,))

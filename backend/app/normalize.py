@@ -11,6 +11,7 @@ from datetime import date
 from typing import Any
 
 from .engine.formulas import is_num
+from .markets import large_amount
 
 
 def _d(s: str) -> date:
@@ -97,7 +98,7 @@ def adjust_periods_for_splits(periods: list[dict[str, Any]], splits: list[list[A
         ref = nxt if is_num(nxt) and nxt > 0 else ref
 
 
-def prefer_continuing_operations(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def prefer_continuing_operations(periods: list[dict[str, Any]], currency: str | None = None) -> list[dict[str, Any]]:
     """Use profit from continuing operations when it differs materially from total profit.
 
     A demerger or business sale can book a large one-off gain in discontinued operations
@@ -121,7 +122,7 @@ def prefer_continuing_operations(periods: list[dict[str, Any]]) -> list[dict[str
                 f[k] = nic / sh
         p.setdefault("notes", []).append(
             "Net profit and EPS use continuing operations; total profit including discontinued operations was "
-            f"{ni / 1e7:,.0f} Cr (currency of statements).")
+            f"{large_amount(ni, currency)}.")
         warnings.append({"period": p["label"], "check": "discontinued_operations", "severity": "medium",
                          "message": "Reported net profit includes a large discontinued-operations item (e.g. a demerger or "
                                     "business sale). Ratios and valuation use profit from continuing operations instead."})
@@ -227,7 +228,7 @@ def normalize_bundle(bundle: dict[str, Any], imported: dict[str, Any] | None = N
         adjust_periods_for_splits(bundle[key], splits, shares_now)
     disc_warnings = []
     for key in ("annual", "quarterly"):
-        disc_warnings += prefer_continuing_operations(bundle[key])
+        disc_warnings += prefer_continuing_operations(bundle[key], (bundle.get("profile") or {}).get("currency"))
     # Drop annual periods that carry almost nothing (Yahoo sometimes returns a stub oldest column).
     bundle["annual"] = [p for p in bundle["annual"] if len(p["fields"]) >= 3]
     bundle["data_quality"] = fx_warnings + disc_warnings + (validate_periods(bundle["annual"], "annual")

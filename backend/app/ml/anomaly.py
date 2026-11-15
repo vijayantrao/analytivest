@@ -114,42 +114,64 @@ def raw_scores(fitted: Fitted, feature_dicts: list[dict[str, Optional[float]]]) 
     return -fitted.model.score_samples(_scale(_matrix(feature_dicts), fitted.median, fitted.scale, fitted.one_sided))
 
 
+def score_many(fitted: Fitted, feature_dicts: list[dict[str, Optional[float]]]) -> list[dict[str, Any]]:
+    """Scores and explanations for many companies in two model calls (one for the scores, one for every
+    occluded copy), instead of two calls per company: each call has a fixed cost of tens of milliseconds."""
+    out: list[Optional[dict[str, Any]]] = [None] * len(feature_dicts)
+    idx = [i for i, f in enumerate(feature_dicts) if usable(f)]
+    for i in set(range(len(feature_dicts))) - set(idx):
+        out[i] = {"available": False, "reason": f"Fewer than {MIN_FEATURES} of the {len(FEATURE_NAMES)} features "
+                                                "could be computed from the available statements."}
+    if not idx:
+        return out  # type: ignore[return-value]
+    feats = [feature_dicts[i] for i in idx]
+    X = _matrix(feats)
+    Z = _scale(X, fitted.median, fitted.scale, fitted.one_sided)
+    OZ = _oriented_z(X, fitted.median, fitted.scale, fitted.one_sided)  # for explanations: + = risky (v2)
+    scores = -fitted.model.score_samples(Z)
+    # Occlusion: one copy of each company per known feature, with that feature reset to the peer median.
+    known = [[j for j, k in enumerate(FEATURE_NAMES) if f.get(k) is not None] for f in feats]
+    occluded = np.repeat(Z, [len(k) for k in known], axis=0)
+    row = 0
+    for ks in known:
+        for j in ks:
+            occluded[row, j] = 0.0
+            row += 1
+    occ_scores = -fitted.model.score_samples(occluded)
+    row = 0
+    for n, (i, f) in enumerate(zip(idx, feats)):
+        s = float(scores[n])
+        drops = s - occ_scores[row:row + len(known[n])]
+        row += len(known[n])
+        reasons = []
+        for d, j in sorted(((float(d), j) for d, j in zip(drops, known[n])), reverse=True):
+            zj = float(OZ[n, j])
+            if d <= 0.005 or (zj < 1.5 if fitted.one_sided else abs(zj) < 1.5):
+                continue
+            k = FEATURE_NAMES[j]
+            reasons.append({"feature": k, "label": FEATURES[k][0], "value": f[k], "peer_median": float(fitted.median[j]),
+                            "z": round(zj, 2), "contribution": round(d, 4),
+                            "text": _describe(k, float(f[k]), float(fitted.median[j]))})
+            if len(reasons) == 3:
+                break
+        pct = fitted.percentile(s)
+        level = "highly_unusual" if pct >= HIGHLY_UNUSUAL_PCT else "unusual" if pct >= UNUSUAL_PCT else "typical"
+        out[i] = {"available": True, "score": round(s, 4), "percentile": round(pct, 1), "level": level,
+                  "reasons": reasons, "missing": [k for k in FEATURE_NAMES if f.get(k) is None],
+                  "features": {k: f.get(k) for k in FEATURE_NAMES},
+                  "peer_median": {k: float(m) for k, m in zip(FEATURE_NAMES, fitted.median)}}
+    return out  # type: ignore[return-value]
+
+
 def score(fitted: Fitted, features: dict[str, Optional[float]]) -> dict[str, Any]:
-    if not usable(features):
-        return {"available": False, "reason": f"Fewer than {MIN_FEATURES} of the {len(FEATURE_NAMES)} features "
-                                              "could be computed from the available statements."}
-    x = _matrix([features])
-    z = _scale(x, fitted.median, fitted.scale, fitted.one_sided)
-    oz = _oriented_z(x, fitted.median, fitted.scale, fitted.one_sided)  # for explanations: + = risky (v2)
-    s = float(-fitted.model.score_samples(z)[0])
-    pct = fitted.percentile(s)
-    known = [j for j, k in enumerate(FEATURE_NAMES) if features.get(k) is not None]
-    occluded = np.repeat(z, len(known), axis=0)
-    for row, j in enumerate(known):
-        occluded[row, j] = 0.0
-    drops = s - (-fitted.model.score_samples(occluded))
-    contributions = sorted(((float(d), j) for d, j in zip(drops, known)), reverse=True)
-    reasons = []
-    for d, j in contributions:
-        zj = float(oz[0, j])
-        if d <= 0.005 or (zj < 1.5 if fitted.one_sided else abs(zj) < 1.5):
-            continue
-        k = FEATURE_NAMES[j]
-        reasons.append({"feature": k, "label": FEATURES[k][0], "value": features[k], "peer_median": float(fitted.median[j]),
-                        "z": round(zj, 2), "contribution": round(d, 4),
-                        "text": _describe(k, float(features[k]), float(fitted.median[j]))})
-        if len(reasons) == 3:
-            break
-    level = "highly_unusual" if pct >= HIGHLY_UNUSUAL_PCT else "unusual" if pct >= UNUSUAL_PCT else "typical"
-    return {"available": True, "score": round(s, 4), "percentile": round(pct, 1), "level": level,
-            "reasons": reasons, "missing": [k for k in FEATURE_NAMES if features.get(k) is None],
-            "features": {k: features.get(k) for k in FEATURE_NAMES},
-            "peer_median": {k: float(m) for k, m in zip(FEATURE_NAMES, fitted.median)}}
+    return score_many(fitted, [features])[0]
 
 
 # ---------------- universe from screener scans (cached per scan state) ----------------
 # One model per market: a US company is only ever compared with US companies, an Indian one with Indian ones.
+# The model and every company's score are cached until that market's scanned features change.
 _cache: dict[str, tuple[str, Optional[Fitted]]] = {}
+_score_cache: dict[str, tuple[str, dict[str, dict[str, Any]]]] = {}
 _cache_lock = threading.Lock()
 
 
@@ -160,13 +182,31 @@ def universe_rows(scan_rows: list[dict[str, Any]], market: str = "IN") -> list[d
             for r in scan_rows if r["summary"].get("ml_features") and market_of(r) == market]
 
 
+def _universe_key(rows: list[dict[str, Any]]) -> str:
+    return hashlib.sha1(json.dumps([[r["symbol"], r["features"]] for r in rows], sort_keys=True).encode()).hexdigest()
+
+
 def fitted_for(scan_rows: list[dict[str, Any]], market: str = "IN") -> tuple[Optional[Fitted], list[dict[str, Any]]]:
     rows = universe_rows(scan_rows, market)
-    key = hashlib.sha1(json.dumps([[r["symbol"], r["features"]] for r in rows], sort_keys=True).encode()).hexdigest()
+    key = _universe_key(rows)
     with _cache_lock:
         if market not in _cache or _cache[market][0] != key:
             _cache[market] = (key, fit(rows))
         return _cache[market][1], rows
+
+
+def scores_for(scan_rows: list[dict[str, Any]], market: str = "IN") -> tuple[Optional[Fitted], dict[str, dict[str, Any]]]:
+    """The market's model plus {symbol: score} for every scanned company, computed once per scan state."""
+    fitted, rows = fitted_for(scan_rows, market)
+    if fitted is None:
+        return None, {}
+    key = _universe_key(rows)
+    with _cache_lock:
+        hit = _score_cache.get(market)
+        if hit is None or hit[0] != key:
+            results = score_many(fitted, [r["features"] for r in rows])
+            hit = _score_cache[market] = (key, {r["symbol"]: s for r, s in zip(rows, results)})
+        return fitted, hit[1]
 
 
 MODEL_CARD = {

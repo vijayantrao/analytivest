@@ -54,7 +54,7 @@ def test_sample_rhp_extracts_every_key_field(sample_pdf):
     assert (dr["price_band_low"], dr["price_band_high"], dr["lot_size"], dr["face_value"]) == (415, 436, 34, 2)
     assert dr["fresh_issue_cr"] == pytest.approx(400.0) and dr["ofs_cr"] == pytest.approx(600.0)  # million -> crore
     assert dr["pre_issue_shares"] == 10.5e7 and dr["post_issue_shares"] == 114174312
-    assert (dr["promoter_pre_pct"], dr["promoter_post_pct"]) == (88.0, 64.0)
+    assert (dr["promoter_pre_pct"], dr["promoter_post_pct"]) == (88.0, 68.88)
     assert dr["open_date"] == "2026-11-02" and dr["close_date"] == "2026-11-04"
     fin = {f["fy"]: f for f in dr["financials"]}
     assert set(fin) == {"FY2024", "FY2025", "FY2026"}  # part-year column ignored
@@ -165,8 +165,23 @@ def test_decision_ignores_gmp_and_subscription():
     base = decide(analyse_ipo(p, []), p)
     p["gmp"] = {"value": 500}
     p["subscription"] = {"total": 400}
+    p["risk_factors"] = [f"risk factor {i}" for i in range(25)]  # copying more of the document is not more risk
     hyped = decide(analyse_ipo(p, []), p)
     assert hyped["verdict"] == base["verdict"]
+    assert hyped["score"] == base["score"] and hyped["components"] == base["components"]
+
+
+def test_sample_ipo_figures_reconcile(sample_pdf):
+    """The fictional IPO must add up, and the stored record must agree with the sample RHP document."""
+    p = SAMPLE_IPO["payload"]
+    price, pre = p["price_band_high"], p["pre_issue_shares"]
+    fresh_shares, ofs_shares = p["fresh_issue_cr"] * 1e7 / price, p["ofs_cr"] * 1e7 / price
+    post_promoter = (p["promoter_pre_pct"] / 100 * pre - ofs_shares) / (pre + fresh_shares) * 100
+    assert p["promoter_post_pct"] == pytest.approx(post_promoter, abs=0.05)
+    dr = parse_offer_document(extract_text(sample_pdf, "rhp.pdf").pages)["draft"]
+    for k in ("price_band_low", "price_band_high", "lot_size", "face_value", "fresh_issue_cr", "ofs_cr",
+              "pre_issue_shares", "promoter_pre_pct", "promoter_post_pct", "open_date", "close_date"):
+        assert dr[k] == pytest.approx(p[k]) if isinstance(p[k], float) else dr[k] == p[k], k
 
 
 # ---------------- API ----------------

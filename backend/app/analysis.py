@@ -139,7 +139,7 @@ def analyse(symbol: str, *, force: bool = False, dcf_overrides: Optional[dict[st
     flags.sort(key=lambda f: {"high": 0, "medium": 1, "low": 2}[f["severity"]])
     scores = score_company(bundle, metrics, val, flags, peers, notes, cfg, market=market.code)
     name = (bundle.get("profile") or {}).get("name") or symbol
-    narrative = build_narrative(name, metrics, val, scores, flags)
+    narrative = build_narrative(name, metrics, val, scores, flags, (bundle.get("quote") or {}).get("currency"))
 
     divs = bundle.get("dividends") or []
     dps = V.dividends_per_fy(divs, metrics["annual"]["period_ends"])

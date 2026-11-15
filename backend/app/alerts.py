@@ -18,7 +18,7 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from . import db
-from .markets import market_for_symbol
+from .markets import market_for_symbol, money
 
 log = logging.getLogger("analytivest.alerts")
 _job_lock = threading.Lock()
@@ -70,11 +70,11 @@ def diff(prev: dict[str, Any], cur: dict[str, Any]) -> list[dict[str, Any]]:
         mv = (p1 / p0 - 1) * 100
         if abs(mv) >= PRICE_MOVE_PCT:
             add("price_move", "low", f"{name}: price {'up' if mv > 0 else 'down'} {abs(mv):.1f}%",
-                f"₹{p0:,.2f} → ₹{p1:,.2f} since the last check.")
+                f"{money(p0, cur.get('currency'))} → {money(p1, cur.get('currency'))} since the last check.")
         low = cur.get("fv_low")
         if low and p1 < low <= p0:
             add("below_fair_range", "medium", f"{name}: price fell below the estimated fair-value range",
-                f"Price ₹{p1:,.2f} vs range low ₹{low:,.2f}.")
+                f"Price {money(p1, cur.get('currency'))} vs range low {money(low, cur.get('currency'))}.")
     if cur.get("quarter") and prev.get("quarter") and cur["quarter"] != prev["quarter"]:
         sev = "medium" if cur.get("quarter_verdict") in ("Weak quarter", "Soft quarter") else "low"
         add("new_results", sev, f"{name}: new quarterly results ({cur['quarter']})", f"{cur.get('quarter_verdict')}.")

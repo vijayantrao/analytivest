@@ -224,11 +224,13 @@ SAMPLE_IPO = {
         "sector": "Industrials", "industry": "Auto Parts",
         "business_summary": "Fictional auto-component maker used to demonstrate the IPO workflow. All numbers are synthetic.",
         "exchange": "NSE, BSE", "status": "sample",
-        "price_band_low": 415, "price_band_high": 436, "lot_size": 52, "face_value": 2,
+        "price_band_low": 415, "price_band_high": 436, "lot_size": 34, "face_value": 2,
         "fresh_issue_cr": 400, "ofs_cr": 600,
         "pre_issue_shares": 10.5e7,
-        "promoter_pre_pct": 88.0, "promoter_post_pct": 64.0,
-        "open_date": "2026-11-03", "close_date": "2026-11-05", "listing_date": "2026-11-10",
+        # Post-issue holding follows from the issue itself: promoters hold 88% of 10.5 Cr shares (9.24 Cr), sell
+        # 1.376 Cr in the offer for sale, and 0.917 Cr new shares are issued: 7.864 / 11.417 = 68.88%.
+        "promoter_pre_pct": 88.0, "promoter_post_pct": 68.88,
+        "open_date": "2026-11-02", "close_date": "2026-11-04", "listing_date": "2026-11-09",
         "anchor_lockin_50_date": "2026-12-05", "anchor_lockin_100_date": "2027-02-03",
         "use_of_proceeds": [
             {"purpose": "Repayment of borrowings", "amount_cr": 180},

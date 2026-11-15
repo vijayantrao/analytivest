@@ -46,8 +46,13 @@ log = logging.getLogger("stockiq")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.conn()
-    if not db.ipo_get(SAMPLE_IPO["id"]):
-        db.ipo_put(SAMPLE_IPO["id"], SAMPLE_IPO["name"], SAMPLE_IPO["status"], SAMPLE_IPO["payload"], is_sample=True)
+    # The sample IPO is read-only for users, so it is refreshed on every start to match the shipped figures.
+    db.ipo_put(SAMPLE_IPO["id"], SAMPLE_IPO["name"], SAMPLE_IPO["status"], SAMPLE_IPO["payload"], is_sample=True)
+    # Scans only ever run inside this server; alert checks can also run from the command line, so only
+    # hour-old ones are treated as dead.
+    n = db.jobs_fail_unfinished("scan") + db.jobs_fail_unfinished("alerts", older_than_seconds=3600)
+    if n:
+        log.info("Marked %d interrupted background job(s) as failed", n)
     stop = threading.Event()
     if not config.OFFLINE:
         threading.Thread(target=alerts.scheduler_loop, args=(stop,), daemon=True, name="alerts-scheduler").start()
@@ -664,16 +669,25 @@ def portfolio_import(file: UploadFile = File(...), mode: str = Query("replace", 
         parsed = parse_holdings(_read_upload(file), file.filename or "holdings")
     except HoldingsError as e:
         raise HTTPException(422, str(e))
-    if mode == "replace":
-        db.holdings_clear()
-    added, unresolved = [], []
+    # Match every row first; existing holdings are only touched once we know what replaces them.
+    source = file.filename or "import"
+    rows, added, unresolved = [], [], []
     for it in parsed["items"]:
         sym, note = resolve_symbol(it, registry.search, market)
         if not sym:
             unresolved.append({"name": it["raw"], "reason": note})
             continue
-        db.holding_put(sym, it.get("name") or it["raw"], it["quantity"], it.get("avg_cost"), file.filename or "import")
+        rows.append((sym, it.get("name") or it["raw"], it["quantity"], it.get("avg_cost"), source))
         added.append({"symbol": sym, "from": it["raw"], "note": note})
+    if mode == "replace":
+        if not rows:
+            raise HTTPException(422, f"None of the {len(unresolved)} row(s) in this file could be matched to a listed "
+                                     "company, so your existing holdings were kept. Check the file has ticker symbols "
+                                     "(or that you are online, if it only has company names).")
+        db.holdings_replace(rows)
+    else:
+        for r in rows:
+            db.holding_put(*r)
     return {"added": added, "unresolved": unresolved, "skipped": parsed["skipped"]}
 
 
@@ -753,10 +767,7 @@ class ScanIn(BaseModel):
 
 
 def _ml_scores(scan_rows: list[dict[str, Any]], market: str) -> tuple[Optional[anomaly.Fitted], dict[str, dict[str, Any]]]:
-    fitted, rows = anomaly.fitted_for(scan_rows, market)
-    if fitted is None:
-        return None, {}
-    return fitted, {r["symbol"]: anomaly.score(fitted, r["features"]) for r in rows}
+    return anomaly.scores_for(scan_rows, market)
 
 
 @app.get("/api/screener")

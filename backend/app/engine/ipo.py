@@ -190,14 +190,12 @@ def analyse_ipo(p: dict[str, Any], peers: list[dict[str, Any]]) -> dict[str, Any
     ])
     contingent = _n(p.get("contingent_liabilities_cr"))
     pre_p, post_p = _n(p.get("promoter_pre_pct")), _n(p.get("promoter_post_pct"))
-    n_risk = len(p.get("risk_factors") or [])
     governance = _assess([
         ("Contingent liabilities as % of net worth", F.pct(contingent, nw).value if contingent is not None else None,
          [(0, 0), (5, 15), (15, 40), (30, 70), (60, 100)], 35, "%"),
         ("Litigation disclosed (user notes)", 1.0 if (p.get("litigation_notes") or "").strip() else (0.0 if "litigation_notes" in p else None),
          [(0, 10), (1, 50)], 25, "flag"),
         ("Post-issue promoter holding", post_p, [(30, 70), (50, 35), (70, 15), (75, 10)], 25, "%"),
-        ("Risk factors entered", float(n_risk) if p.get("risk_factors") is not None else None, [(0, 20), (5, 40), (15, 60)], 15, "count"),
     ], risk=True)
     gcp = sum(_n(u.get("amount_cr")) or 0 for u in (p.get("use_of_proceeds") or [])
               if "general corporate" in (u.get("purpose") or "").lower())
@@ -210,7 +208,6 @@ def analyse_ipo(p: dict[str, Any], peers: list[dict[str, Any]]) -> dict[str, Any
         ("General corporate purposes as % of fresh issue", (gcp / fresh_cr * 100) if fresh_cr else None,
          [(0, 5), (10, 20), (25, 60), (35, 90)], 15, "%"),
         ("P/E premium vs peers", peer_cmp["pe_premium_pct"], [(-30, 5), (0, 30), (30, 60), (80, 90)], 20, "%"),
-        ("Subscription frenzy (overall ×)", _n(sub.get("total")), [(1, 10), (20, 30), (50, 55), (150, 75)], 15, "×"),
     ], risk=True)
 
     # Lock-ins (approximate; SEBI ICDR rules as of 2022+)

@@ -52,7 +52,7 @@ No API keys are needed. Optional settings are documented in [`.env.example`](.en
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest            # 131 offline tests (formulas, scoring, valuation, IPO, imports, portfolio, alerts, security, backup, ML, US, API)
+.\.venv\Scripts\python -m pytest            # 141 offline tests (formulas, scoring, valuation, IPO, imports, portfolio, alerts, security, backup, ML, US, regressions, API)
 .\.venv\Scripts\python -m pytest --live     # + 4 integration tests against real Yahoo Finance data
 cd ..\frontend
 npm run build                               # type-checks (tsc) and builds the UI
